@@ -1,6 +1,6 @@
 # Tree Tally (Offline-first PWA)
 
-A minimal, extensible offline-first PWA foundation for a tree planting tally app. It uses **Vite + TypeScript** with a tiny UI and stores data locally in **IndexedDB** via [Dexie](https://dexie.org/) (small, well-supported wrapper).
+A minimal, extensible offline-first PWA foundation for a tree planting tally app. It uses **Vite + TypeScript** with a tiny UI and stores data locally in **IndexedDB** via a small native wrapper.
 
 ## Requirements
 - Node.js 18+

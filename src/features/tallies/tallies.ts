@@ -1,4 +1,11 @@
-import { db } from '../../db';
+import {
+  addTally,
+  countByStatus,
+  getPendingTallies,
+  getTalliesByDate,
+  getTalliesByStatus,
+  updateTally,
+} from '../../db';
 import type { CreateTallyInput, TallyRecord } from './types';
 
 const createUUID = (): string => {
@@ -20,58 +27,52 @@ export const createLocalTally = async (input: CreateTallyInput): Promise<TallyRe
     sync_status: 'pending',
   };
 
-  await db.tallies.add(tally);
+  await addTally(tally);
   return tally;
 };
 
 export const listTalliesByDate = async (date: string): Promise<TallyRecord[]> => {
-  return db.tallies.where('date').equals(date).reverse().sortBy('created_at');
+  return getTalliesByDate(date);
 };
 
 export const listPendingTallies = async (limit = 20): Promise<TallyRecord[]> => {
-  return db.tallies.where('sync_status').equals('pending').limit(limit).toArray();
+  const pending = await getPendingTallies();
+  return pending.slice(0, limit);
 };
 
 export const listSyncQueue = async (limit = 20): Promise<TallyRecord[]> => {
-  return db.tallies
-    .where('sync_status')
-    .anyOf(['pending', 'error'])
-    .limit(limit)
-    .toArray();
+  const queued = await getTalliesByStatus(['pending', 'error']);
+  return queued.slice(0, limit);
 };
 
 export const listSyncCounts = async (): Promise<{ pending: number; synced: number; error: number }> => {
   const [pending, synced, error] = await Promise.all([
-    db.tallies.where('sync_status').equals('pending').count(),
-    db.tallies.where('sync_status').equals('synced').count(),
-    db.tallies.where('sync_status').equals('error').count(),
+    countByStatus('pending'),
+    countByStatus('synced'),
+    countByStatus('error'),
   ]);
 
   return { pending, synced, error };
 };
 
 export const markTalliesSynced = async (tallies: TallyRecord[]): Promise<void> => {
-  await db.transaction('rw', db.tallies, async () => {
-    await Promise.all(
-      tallies.map((tally) =>
-        db.tallies.update(tally.client_id, {
-          sync_status: 'synced',
-          sync_error: undefined,
-        })
-      )
-    );
-  });
+  await Promise.all(
+    tallies.map((tally) =>
+      updateTally(tally.client_id, {
+        sync_status: 'synced',
+        sync_error: undefined,
+      })
+    )
+  );
 };
 
 export const markTalliesError = async (tallies: TallyRecord[], error: string): Promise<void> => {
-  await db.transaction('rw', db.tallies, async () => {
-    await Promise.all(
-      tallies.map((tally) =>
-        db.tallies.update(tally.client_id, {
-          sync_status: 'error',
-          sync_error: error,
-        })
-      )
-    );
-  });
+  await Promise.all(
+    tallies.map((tally) =>
+      updateTally(tally.client_id, {
+        sync_status: 'error',
+        sync_error: error,
+      })
+    )
+  );
 };
