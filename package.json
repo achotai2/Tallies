@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview"
   },
-  "dependencies": {},
+  "dependencies": {
+    "dexie": "^4.0.4"
+  },
   "devDependencies": {
     "typescript": "^5.4.5",
     "vite": "^5.2.11"

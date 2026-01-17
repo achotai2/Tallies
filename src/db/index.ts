@@ -1,1 +1,1 @@
-export * from './indexedDb';
+export * from './db';
