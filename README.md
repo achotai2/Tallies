@@ -1,0 +1,2 @@
+# Tallies
+Offline tallies app
