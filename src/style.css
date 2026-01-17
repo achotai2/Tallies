@@ -1,0 +1,143 @@
+:root {
+  font-family: 'Inter', system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #0f172a;
+  background-color: #f8fafc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px 80px;
+}
+
+h1 {
+  font-size: 1.75rem;
+  margin: 0 0 12px;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  margin-bottom: 16px;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+input,
+textarea {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #cbd5f5;
+  font-size: 1rem;
+  margin-bottom: 12px;
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  border-radius: 999px;
+  border: none;
+  background: #0f766e;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: #0f172a;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+button + button {
+  margin-top: 8px;
+}
+
+.status-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+
+.status-pill {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.status-pill.pending {
+  background: #fef9c3;
+}
+
+.status-pill.synced {
+  background: #d1fae5;
+}
+
+.status-pill.error {
+  background: #fee2e2;
+}
+
+.tally-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tally-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.tally-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: #475569;
+}
+
+.small {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+@media (min-width: 640px) {
+  .row {
+    display: flex;
+    gap: 12px;
+  }
+
+  .row > div {
+    flex: 1;
+  }
+
+  button {
+    width: auto;
+  }
+
+  button + button {
+    margin-top: 0;
+  }
+}
