@@ -1,13 +1,20 @@
 import { API_BASE_URL } from './config';
 import type { TallyRecord } from '../features/tallies/types';
+import type { Bagup, TallySession } from '../features/tally_session/types';
 
-export const postTalliesBatch = async (tallies: TallyRecord[]): Promise<void> => {
+export type TalliesBatchPayload = {
+  tallies: TallyRecord[];
+  sessions: TallySession[];
+  bagups: Bagup[];
+};
+
+export const postTalliesBatch = async (payload: TalliesBatchPayload): Promise<void> => {
   const response = await fetch(`${API_BASE_URL}/tallies/batch`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ tallies }),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {

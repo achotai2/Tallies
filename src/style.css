@@ -25,6 +25,10 @@ h1 {
   margin: 0 0 12px;
 }
 
+h2 {
+  margin: 0 0 12px;
+}
+
 .card {
   background: #ffffff;
   border-radius: 16px;
@@ -65,6 +69,13 @@ button.secondary {
   background: #0f172a;
 }
 
+button.compact {
+  width: auto;
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+}
+
 button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -72,6 +83,29 @@ button:disabled {
 
 button + button {
   margin-top: 8px;
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.fab {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  font-size: 1.6rem;
+  padding: 0;
 }
 
 .status-row {
@@ -118,6 +152,88 @@ button + button {
   color: #475569;
 }
 
+.session-item {
+  text-align: left;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+
+.species-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.species-row {
+  display: grid;
+  gap: 8px;
+}
+
+.species-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.species-summary {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.species-title {
+  font-weight: 600;
+}
+
+.species-meta {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.species-current,
+.species-total {
+  font-size: 0.9rem;
+}
+
+.bagup-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.bagup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bagup-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bagup-count {
+  background: #f1f5f9;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+}
+
+.editor-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .small {
   font-size: 0.85rem;
   color: #64748b;
@@ -139,5 +255,15 @@ button + button {
 
   button + button {
     margin-top: 0;
+  }
+
+  .species-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: center;
+  }
+
+  .editor-actions {
+    flex-direction: row;
+    justify-content: flex-end;
   }
 }
