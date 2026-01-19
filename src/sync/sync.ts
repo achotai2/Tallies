@@ -4,6 +4,14 @@ import {
   markTalliesError,
   markTalliesSynced,
 } from '../features/tallies/tallies';
+import {
+  listBagupSyncQueue,
+  listSessionSyncQueue,
+  markBagupsError,
+  markBagupsSynced,
+  markSessionsError,
+  markSessionsSynced,
+} from '../features/tally_session/db';
 
 const BATCH_SIZE = 20;
 
@@ -16,22 +24,43 @@ export const syncTallies = async (): Promise<{ synced: number; failed: number; s
   let failed = 0;
 
   while (true) {
-    const pending = await listSyncQueue(BATCH_SIZE);
-    if (pending.length === 0) {
+    const [pendingTallies, pendingSessions, pendingBagups] = await Promise.all([
+      listSyncQueue(BATCH_SIZE),
+      listSessionSyncQueue(BATCH_SIZE),
+      listBagupSyncQueue(BATCH_SIZE),
+    ]);
+
+    if (pendingTallies.length === 0 && pendingSessions.length === 0 && pendingBagups.length === 0) {
       break;
     }
 
     try {
-      await postTalliesBatch(pending);
-      await markTalliesSynced(pending);
-      synced += pending.length;
+      await postTalliesBatch({
+        tallies: pendingTallies,
+        sessions: pendingSessions,
+        bagups: pendingBagups,
+      });
+      await Promise.all([
+        markTalliesSynced(pendingTallies),
+        markSessionsSynced(pendingSessions),
+        markBagupsSynced(pendingBagups),
+      ]);
+      synced += pendingTallies.length + pendingSessions.length + pendingBagups.length;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Sync failed';
-      await markTalliesError(pending, message);
-      failed += pending.length;
+      await Promise.all([
+        markTalliesError(pendingTallies, message),
+        markSessionsError(pendingSessions, message),
+        markBagupsError(pendingBagups, message),
+      ]);
+      failed += pendingTallies.length + pendingSessions.length + pendingBagups.length;
     }
 
-    if (pending.length < BATCH_SIZE) {
+    if (
+      pendingTallies.length < BATCH_SIZE &&
+      pendingSessions.length < BATCH_SIZE &&
+      pendingBagups.length < BATCH_SIZE
+    ) {
       break;
     }
   }

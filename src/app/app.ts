@@ -5,9 +5,33 @@ import {
   listSyncCounts,
 } from '../features/tallies/tallies';
 import type { CreateTallyInput, TallyRecord } from '../features/tallies/types';
+import {
+  createBagup,
+  createTallySession,
+  fetchTallySession,
+  listBagupSyncCounts,
+  listBagupsForSession,
+  listSessionSyncCounts,
+  listTallySessions,
+  removeBagup,
+  saveBagupCounts,
+} from '../features/tally_session/db';
+import type { Bagup, CreateTallySessionInput, SpeciesRequirement } from '../features/tally_session/types';
+import { buildElapsedMap, calculateRatios, calculateTotals, formatDuration } from '../features/tally_session/calculations';
+import { createSpeciesEditorRow, createSpeciesSummaryRow } from '../features/tally_session/ui';
 import { syncTallies } from '../sync/sync';
 
 const todayISO = (): string => new Date().toISOString().slice(0, 10);
+
+const formatTime = (timestamp: number): string =>
+  new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+const formatRatioText = (ratio: number, overall: number): string => {
+  if (overall === 0) {
+    return '—';
+  }
+  return `${Math.round(ratio * 100)}%`;
+};
 
 const renderTallyItem = (tally: TallyRecord): HTMLElement => {
   const item = createElement('div', { className: 'tally-item' });
@@ -18,11 +42,7 @@ const renderTallyItem = (tally: TallyRecord): HTMLElement => {
   const status = createElement('span', {
     text: tally.sync_status,
   });
-  const time = new Date(tally.created_at).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-  const timeEl = createElement('span', { text: time });
+  const timeEl = createElement('span', { text: formatTime(tally.created_at) });
   meta.append(status, timeEl);
 
   if (tally.notes) {
@@ -43,135 +63,527 @@ const renderTallyItem = (tally: TallyRecord): HTMLElement => {
   return item;
 };
 
+type ViewState =
+  | { view: 'home' }
+  | { view: 'new-session' }
+  | { view: 'session-detail'; sessionId: string };
+
+type DraftBagup = {
+  sessionId: string;
+  bagupId: string;
+  createdAt: number;
+  counts: Record<string, number>;
+};
+
 export const initApp = (): void => {
   const root = document.querySelector<HTMLDivElement>('#app');
   if (!root) return;
 
-  root.innerHTML = '';
+  let viewState: ViewState = { view: 'home' };
+  let draftBagup: DraftBagup | null = null;
 
-  const header = createElement('h1', { text: 'Tree Tally' });
-  const formCard = createElement('section', { className: 'card' });
-  const listCard = createElement('section', { className: 'card' });
-  const syncCard = createElement('section', { className: 'card' });
-
-  const form = document.createElement('form');
-  const dateField = createElement('input') as HTMLInputElement;
-  dateField.type = 'date';
-  dateField.required = true;
-  dateField.value = todayISO();
-
-  const treesField = createElement('input') as HTMLInputElement;
-  treesField.type = 'number';
-  treesField.min = '1';
-  treesField.placeholder = 'Trees planted';
-  treesField.required = true;
-
-  const blockField = createElement('input') as HTMLInputElement;
-  blockField.placeholder = 'Block name (optional)';
-
-  const notesField = document.createElement('textarea');
-  notesField.rows = 3;
-  notesField.placeholder = 'Notes (optional)';
-
-  const submitButton = createElement('button', { text: 'Save tally' }) as HTMLButtonElement;
-  submitButton.type = 'submit';
-
-  form.append(
-    createElement('label', { text: 'Date' }),
-    dateField,
-    createElement('label', { text: 'Trees' }),
-    treesField,
-    createElement('label', { text: 'Block name' }),
-    blockField,
-    createElement('label', { text: 'Notes' }),
-    notesField,
-    submitButton
-  );
-  formCard.append(form);
-
-  const listTitle = createElement('h2', { text: 'Today' });
-  const tallyList = createElement('div', { className: 'tally-list' });
-  listCard.append(listTitle, tallyList);
-
-  const syncTitle = createElement('h2', { text: 'Sync status' });
-  const statusRow = createElement('div', { className: 'status-row' });
-  const pendingPill = createElement('span', { className: 'status-pill pending' });
-  const syncedPill = createElement('span', { className: 'status-pill synced' });
-  const errorPill = createElement('span', { className: 'status-pill error' });
-  statusRow.append(pendingPill, syncedPill, errorPill);
-
-  const syncButton = createElement('button', { text: 'Sync now' }) as HTMLButtonElement;
-  syncButton.className = 'secondary';
-  const retryButton = createElement('button', { text: 'Retry sync' }) as HTMLButtonElement;
-
-  const syncMessage = createElement('div', { className: 'small' });
-
-  syncCard.append(syncTitle, statusRow, syncButton, retryButton, syncMessage);
-
-  root.append(header, formCard, listCard, syncCard);
-
-  const refreshTallies = async (): Promise<void> => {
-    const date = dateField.value;
-    const tallies = await listTalliesByDate(date);
-    tallyList.innerHTML = '';
-    if (tallies.length === 0) {
-      tallyList.append(createElement('div', { className: 'small', text: 'No tallies yet.' }));
-    } else {
-      tallies.forEach((tally) => tallyList.append(renderTallyItem(tally)));
-    }
+  const navigate = (state: ViewState): void => {
+    viewState = state;
+    void render();
   };
 
-  const refreshCounts = async (): Promise<void> => {
-    const counts = await listSyncCounts();
-    pendingPill.textContent = `Pending: ${counts.pending}`;
-    syncedPill.textContent = `Synced: ${counts.synced}`;
-    errorPill.textContent = `Error: ${counts.error}`;
-  };
+  const renderHome = async (): Promise<void> => {
+    root.innerHTML = '';
 
-  const refreshAll = async (): Promise<void> => {
-    await Promise.all([refreshTallies(), refreshCounts()]);
-  };
+    const header = createElement('h1', { text: 'Tree Tally' });
+    const actionCard = createElement('section', { className: 'card' });
+    const formCard = createElement('section', { className: 'card' });
+    const listCard = createElement('section', { className: 'card' });
+    const sessionsCard = createElement('section', { className: 'card' });
+    const syncCard = createElement('section', { className: 'card' });
 
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    submitButton.disabled = true;
-    const input: CreateTallyInput = {
-      date: dateField.value,
-      trees: Number(treesField.value),
-      notes: notesField.value,
-      block_name: blockField.value,
+    const startSessionButton = createElement('button', { text: 'Start New Tally' }) as HTMLButtonElement;
+    startSessionButton.type = 'button';
+    startSessionButton.addEventListener('click', () => navigate({ view: 'new-session' }));
+    actionCard.append(startSessionButton);
+
+    const form = document.createElement('form');
+    const dateField = createElement('input') as HTMLInputElement;
+    dateField.type = 'date';
+    dateField.required = true;
+    dateField.value = todayISO();
+
+    const treesField = createElement('input') as HTMLInputElement;
+    treesField.type = 'number';
+    treesField.min = '1';
+    treesField.placeholder = 'Trees planted';
+    treesField.required = true;
+
+    const blockField = createElement('input') as HTMLInputElement;
+    blockField.placeholder = 'Block name (optional)';
+
+    const notesField = document.createElement('textarea');
+    notesField.rows = 3;
+    notesField.placeholder = 'Notes (optional)';
+
+    const submitButton = createElement('button', { text: 'Save tally' }) as HTMLButtonElement;
+    submitButton.type = 'submit';
+
+    form.append(
+      createElement('label', { text: 'Date' }),
+      dateField,
+      createElement('label', { text: 'Trees' }),
+      treesField,
+      createElement('label', { text: 'Block name' }),
+      blockField,
+      createElement('label', { text: 'Notes' }),
+      notesField,
+      submitButton
+    );
+    formCard.append(form);
+
+    const listTitle = createElement('h2', { text: 'Today' });
+    const tallyList = createElement('div', { className: 'tally-list' });
+    listCard.append(listTitle, tallyList);
+
+    const sessionsTitle = createElement('h2', { text: 'Tally Sessions' });
+    const sessionsList = createElement('div', { className: 'tally-list' });
+    sessionsCard.append(sessionsTitle, sessionsList);
+
+    const syncTitle = createElement('h2', { text: 'Sync status' });
+    const statusRow = createElement('div', { className: 'status-row' });
+    const pendingPill = createElement('span', { className: 'status-pill pending' });
+    const syncedPill = createElement('span', { className: 'status-pill synced' });
+    const errorPill = createElement('span', { className: 'status-pill error' });
+    statusRow.append(pendingPill, syncedPill, errorPill);
+
+    const syncButton = createElement('button', { text: 'Sync now' }) as HTMLButtonElement;
+    syncButton.className = 'secondary';
+    const retryButton = createElement('button', { text: 'Retry sync' }) as HTMLButtonElement;
+
+    const syncMessage = createElement('div', { className: 'small' });
+
+    syncCard.append(syncTitle, statusRow, syncButton, retryButton, syncMessage);
+
+    root.append(header, actionCard, formCard, listCard, sessionsCard, syncCard);
+
+    const refreshTallies = async (): Promise<void> => {
+      const date = dateField.value;
+      const tallies = await listTalliesByDate(date);
+      tallyList.innerHTML = '';
+      if (tallies.length === 0) {
+        tallyList.append(createElement('div', { className: 'small', text: 'No tallies yet.' }));
+      } else {
+        tallies.forEach((tally) => tallyList.append(renderTallyItem(tally)));
+      }
     };
 
-    await createLocalTally(input);
-    form.reset();
-    dateField.value = input.date;
-    submitButton.disabled = false;
-    await refreshAll();
-  });
+    const refreshSessions = async (): Promise<void> => {
+      const sessions = await listTallySessions();
+      sessionsList.innerHTML = '';
+      if (sessions.length === 0) {
+        sessionsList.append(createElement('div', { className: 'small', text: 'No sessions yet.' }));
+        return;
+      }
 
-  dateField.addEventListener('change', () => {
-    refreshTallies();
-  });
+      sessions.forEach((session) => {
+        const item = createElement('button', { className: 'session-item' }) as HTMLButtonElement;
+        item.type = 'button';
+        const title = createElement('div', { text: session.block_name });
+        const meta = createElement('div', {
+          className: 'tally-meta',
+          text: `${session.species.length} species · ${formatTime(session.created_at)} · ${session.sync_status}`,
+        });
+        item.append(title, meta);
+        item.addEventListener('click', () => navigate({ view: 'session-detail', sessionId: session.session_id }));
+        sessionsList.append(item);
+      });
+    };
 
-  const handleSync = async () => {
-    syncButton.disabled = true;
-    retryButton.disabled = true;
-    syncMessage.textContent = navigator.onLine ? 'Syncing...' : 'Offline. Will retry later.';
-    const result = await syncTallies();
-    if (result.skipped) {
-      syncMessage.textContent = 'Offline. Tallies will sync when back online.';
-    } else if (result.failed > 0) {
-      syncMessage.textContent = `Sync finished with ${result.failed} failures.`;
-    } else {
-      syncMessage.textContent = `Synced ${result.synced} tallies.`;
-    }
-    syncButton.disabled = false;
-    retryButton.disabled = false;
+    const refreshCounts = async (): Promise<void> => {
+      const [tallyCounts, sessionCounts, bagupCounts] = await Promise.all([
+        listSyncCounts(),
+        listSessionSyncCounts(),
+        listBagupSyncCounts(),
+      ]);
+      const pending = tallyCounts.pending + sessionCounts.pending + bagupCounts.pending;
+      const synced = tallyCounts.synced + sessionCounts.synced + bagupCounts.synced;
+      const error = tallyCounts.error + sessionCounts.error + bagupCounts.error;
+      pendingPill.textContent = `Pending: ${pending}`;
+      syncedPill.textContent = `Synced: ${synced}`;
+      errorPill.textContent = `Error: ${error}`;
+    };
+
+    const refreshAll = async (): Promise<void> => {
+      await Promise.all([refreshTallies(), refreshSessions(), refreshCounts()]);
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      submitButton.disabled = true;
+      const input: CreateTallyInput = {
+        date: dateField.value,
+        trees: Number(treesField.value),
+        notes: notesField.value,
+        block_name: blockField.value,
+      };
+
+      await createLocalTally(input);
+      form.reset();
+      dateField.value = input.date;
+      submitButton.disabled = false;
+      await refreshAll();
+    });
+
+    dateField.addEventListener('change', () => {
+      refreshTallies();
+    });
+
+    const handleSync = async () => {
+      syncButton.disabled = true;
+      retryButton.disabled = true;
+      syncMessage.textContent = navigator.onLine ? 'Syncing...' : 'Offline. Will retry later.';
+      const result = await syncTallies();
+      if (result.skipped) {
+        syncMessage.textContent = 'Offline. Tallies will sync when back online.';
+      } else if (result.failed > 0) {
+        syncMessage.textContent = `Sync finished with ${result.failed} failures.`;
+      } else {
+        syncMessage.textContent = `Synced ${result.synced} records.`;
+      }
+      syncButton.disabled = false;
+      retryButton.disabled = false;
+      await refreshAll();
+    };
+
+    syncButton.addEventListener('click', handleSync);
+    retryButton.addEventListener('click', handleSync);
+
     await refreshAll();
   };
 
-  syncButton.addEventListener('click', handleSync);
-  retryButton.addEventListener('click', handleSync);
+  const renderNewSession = async (): Promise<void> => {
+    root.innerHTML = '';
 
-  refreshAll();
+    const headerRow = createElement('div', { className: 'header-row' });
+    const backButton = createElement('button', { text: 'Back' }) as HTMLButtonElement;
+    backButton.type = 'button';
+    backButton.className = 'secondary compact';
+    backButton.addEventListener('click', async () => {
+      if (draftForSession) {
+        await removeBagup(draftForSession.bagupId);
+        draftBagup = null;
+      }
+      navigate({ view: 'home' });
+    });
+    const title = createElement('h1', { text: 'New Tally Session' });
+    headerRow.append(backButton, title);
+
+    const card = createElement('section', { className: 'card' });
+    const form = document.createElement('form');
+
+    const blockField = createElement('input') as HTMLInputElement;
+    blockField.placeholder = 'Block name';
+    blockField.required = true;
+
+    const notesField = document.createElement('textarea');
+    notesField.rows = 2;
+    notesField.placeholder = 'Notes (optional)';
+
+    const speciesContainer = createElement('div', { className: 'species-container' });
+    const addSpeciesButton = createElement('button', { text: 'Add species' }) as HTMLButtonElement;
+    addSpeciesButton.type = 'button';
+    addSpeciesButton.className = 'secondary';
+
+    const saveButton = createElement('button', { text: 'Start session' }) as HTMLButtonElement;
+    saveButton.type = 'submit';
+
+    const rows: Array<ReturnType<typeof createSpeciesEditorRow>> = [];
+
+    const updateRemoveButtons = () => {
+      const disable = rows.length <= 1;
+      rows.forEach((row) => {
+        row.removeButton.disabled = disable;
+      });
+    };
+
+    const addSpeciesRow = (initial?: Partial<SpeciesRequirement>) => {
+      const row = createSpeciesEditorRow({
+        initial,
+        onRemove: () => {
+          if (rows.length <= 1) {
+            return;
+          }
+          const index = rows.indexOf(row);
+          if (index >= 0) {
+            rows.splice(index, 1);
+          }
+          row.row.remove();
+          updateRemoveButtons();
+        },
+      });
+      row.codeInput.required = true;
+      row.nameInput.required = true;
+      row.ratioInput.required = true;
+      speciesContainer.append(row.row);
+      rows.push(row);
+      updateRemoveButtons();
+    };
+
+    addSpeciesButton.addEventListener('click', () => addSpeciesRow());
+
+    addSpeciesRow();
+
+    form.append(
+      createElement('label', { text: 'Block name' }),
+      blockField,
+      createElement('label', { text: 'Notes' }),
+      notesField,
+      createElement('label', { text: 'Species (code, name, required ratio)' }),
+      speciesContainer,
+      addSpeciesButton,
+      saveButton
+    );
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) {
+        return;
+      }
+      const species: SpeciesRequirement[] = rows.map((row) => ({
+        species_code: row.codeInput.value.trim(),
+        display_name: row.nameInput.value.trim(),
+        required_ratio: Number(row.ratioInput.value),
+      }));
+
+      const input: CreateTallySessionInput = {
+        block_name: blockField.value,
+        notes: notesField.value,
+        species,
+      };
+
+      saveButton.disabled = true;
+      const session = await createTallySession(input);
+      saveButton.disabled = false;
+      navigate({ view: 'session-detail', sessionId: session.session_id });
+    });
+
+    card.append(form);
+    root.append(headerRow, card);
+  };
+
+  const renderSessionDetail = async (sessionId: string): Promise<void> => {
+    root.innerHTML = '';
+    const session = await fetchTallySession(sessionId);
+    if (!session) {
+      const message = createElement('div', { className: 'small', text: 'Session not found.' });
+      const backButton = createElement('button', { text: 'Back' }) as HTMLButtonElement;
+      backButton.type = 'button';
+      backButton.addEventListener('click', () => navigate({ view: 'home' }));
+      root.append(backButton, message);
+      return;
+    }
+
+    const bagups = await listBagupsForSession(sessionId);
+    const draftForSession = draftBagup?.sessionId === sessionId ? draftBagup : null;
+    const bagupsForTotals = draftForSession
+      ? [
+          ...bagups.filter((bagup) => bagup.bagup_id !== draftForSession.bagupId),
+          {
+            bagup_id: draftForSession.bagupId,
+            session_id: sessionId,
+            created_at: draftForSession.createdAt,
+            counts: draftForSession.counts,
+            sync_status: 'pending',
+          } as Bagup,
+        ].sort((a, b) => b.created_at - a.created_at)
+      : bagups;
+
+    const totals = calculateTotals(session.species, bagupsForTotals);
+    const ratios = calculateRatios(session.species, totals);
+    const overallTotal = Object.values(totals).reduce((sum, value) => sum + value, 0);
+
+    const latestBagup = bagupsForTotals[0];
+    const timeSinceLast = latestBagup ? formatDuration(Date.now() - latestBagup.created_at) : '—';
+
+    const headerRow = createElement('div', { className: 'header-row' });
+    const backButton = createElement('button', { text: 'Back' }) as HTMLButtonElement;
+    backButton.type = 'button';
+    backButton.className = 'secondary compact';
+    backButton.addEventListener('click', () => navigate({ view: 'home' }));
+    const title = createElement('h1', { text: session.block_name });
+    const addBagupButton = createElement('button', { text: '+' }) as HTMLButtonElement;
+    addBagupButton.type = 'button';
+    addBagupButton.className = 'fab';
+    headerRow.append(backButton, title, addBagupButton);
+
+    const metaCard = createElement('section', { className: 'card' });
+    const metaRow = createElement('div', { className: 'meta-row' });
+    const timeLabel = createElement('div', { className: 'small', text: `Time since last bagup: ${timeSinceLast}` });
+    const createdLabel = createElement('div', {
+      className: 'small',
+      text: `Started ${new Date(session.created_at).toLocaleDateString()}`,
+    });
+    metaRow.append(timeLabel, createdLabel);
+    if (session.notes) {
+      const notes = createElement('div', { className: 'small', text: session.notes });
+      metaCard.append(metaRow, notes);
+    } else {
+      metaCard.append(metaRow);
+    }
+
+    const summaryCard = createElement('section', { className: 'card' });
+    const summaryTitle = createElement('h2', { text: 'Species totals' });
+    const summaryList = createElement('div', { className: 'species-summary-list' });
+    session.species.forEach((species) => {
+      summaryList.append(createSpeciesSummaryRow(species));
+    });
+    summaryCard.append(summaryTitle, summaryList);
+
+    const bagupCard = createElement('section', { className: 'card' });
+    const bagupTitleRow = createElement('div', { className: 'bagup-title-row' });
+    const bagupTitle = createElement('h2', { text: 'Bagups' });
+    bagupTitleRow.append(bagupTitle);
+    const bagupList = createElement('div', { className: 'tally-list' });
+    bagupCard.append(bagupTitleRow, bagupList);
+
+    const updateSummary = (nextTotals: Record<string, number>, nextRatios: Record<string, number>) => {
+      const nextOverall = Object.values(nextTotals).reduce((sum, value) => sum + value, 0);
+      session.species.forEach((species) => {
+        const row = summaryList.querySelector<HTMLDivElement>(
+          `[data-species-code="${species.species_code}"]`
+        );
+        if (!row) return;
+        const currentEl = row.querySelector<HTMLDivElement>('.species-current');
+        const totalEl = row.querySelector<HTMLDivElement>('.species-total');
+        if (currentEl) {
+          currentEl.textContent = `Current: ${formatRatioText(nextRatios[species.species_code] ?? 0, nextOverall)}`;
+        }
+        if (totalEl) {
+          totalEl.textContent = `Total: ${nextTotals[species.species_code] ?? 0}`;
+        }
+      });
+    };
+
+    updateSummary(totals, ratios);
+
+    const renderBagups = (items: Bagup[]) => {
+      bagupList.innerHTML = '';
+      if (items.length === 0) {
+        bagupList.append(createElement('div', { className: 'small', text: 'No bagups yet.' }));
+        return;
+      }
+
+      const elapsedMap = buildElapsedMap(items);
+      items.forEach((bagup) => {
+        const item = createElement('div', { className: 'bagup-item' });
+        const header = createElement('div', { className: 'bagup-header' });
+        const time = createElement('div', { text: formatTime(bagup.created_at) });
+        const elapsed = createElement('div', { className: 'small', text: elapsedMap[bagup.bagup_id] });
+        header.append(time, elapsed);
+
+        const counts = createElement('div', { className: 'bagup-counts' });
+        session.species.forEach((species) => {
+          const count = bagup.counts[species.species_code] ?? 0;
+          counts.append(
+            createElement('span', {
+              className: 'bagup-count',
+              text: `${species.display_name}: ${count}`,
+            })
+          );
+        });
+
+        item.append(header, counts);
+        bagupList.append(item);
+      });
+    };
+
+    renderBagups(bagups.filter((bagup) => bagup.bagup_id !== draftForSession?.bagupId));
+
+    addBagupButton.addEventListener('click', async () => {
+      if (draftBagup) {
+        return;
+      }
+      const speciesCodes = session.species.map((species) => species.species_code);
+      const bagup = await createBagup(sessionId, speciesCodes);
+      draftBagup = {
+        sessionId,
+        bagupId: bagup.bagup_id,
+        createdAt: bagup.created_at,
+        counts: { ...bagup.counts },
+      };
+      await renderSessionDetail(sessionId);
+    });
+
+    if (draftForSession) {
+      const editorCard = createElement('section', { className: 'card' });
+      const editorTitle = createElement('h2', { text: 'New bagup' });
+      const editorForm = document.createElement('form');
+
+      session.species.forEach((species) => {
+        const label = createElement('label', { text: species.display_name });
+        const input = createElement('input') as HTMLInputElement;
+        input.type = 'number';
+        input.min = '0';
+        input.value = String(draftForSession.counts[species.species_code] ?? 0);
+        input.addEventListener('input', () => {
+          draftForSession.counts[species.species_code] = Number(input.value || 0);
+          const nextTotals = calculateTotals(session.species, [
+            ...bagups.filter((bagup) => bagup.bagup_id !== draftForSession.bagupId),
+            {
+              bagup_id: draftForSession.bagupId,
+              session_id: sessionId,
+              created_at: draftForSession.createdAt,
+              counts: draftForSession.counts,
+              sync_status: 'pending',
+            },
+          ]);
+          const nextRatios = calculateRatios(session.species, nextTotals);
+          updateSummary(nextTotals, nextRatios);
+        });
+        editorForm.append(label, input);
+      });
+
+      const editorActions = createElement('div', { className: 'editor-actions' });
+      const cancelButton = createElement('button', { text: 'Cancel' }) as HTMLButtonElement;
+      cancelButton.type = 'button';
+      cancelButton.className = 'secondary';
+      const saveButton = createElement('button', { text: 'Save bagup' }) as HTMLButtonElement;
+      saveButton.type = 'submit';
+      editorActions.append(cancelButton, saveButton);
+
+      cancelButton.addEventListener('click', async () => {
+        await removeBagup(draftForSession.bagupId);
+        draftBagup = null;
+        await renderSessionDetail(sessionId);
+      });
+
+      editorForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        saveButton.disabled = true;
+        await saveBagupCounts(draftForSession.bagupId, draftForSession.counts);
+        draftBagup = null;
+        saveButton.disabled = false;
+        await renderSessionDetail(sessionId);
+      });
+
+      editorCard.append(editorTitle, editorForm, editorActions);
+      root.append(headerRow, metaCard, summaryCard, editorCard, bagupCard);
+    } else {
+      root.append(headerRow, metaCard, summaryCard, bagupCard);
+    }
+  };
+
+  const render = async (): Promise<void> => {
+    switch (viewState.view) {
+      case 'home':
+        await renderHome();
+        return;
+      case 'new-session':
+        await renderNewSession();
+        return;
+      case 'session-detail':
+        await renderSessionDetail(viewState.sessionId);
+        return;
+      default:
+        return;
+    }
+  };
+
+  void render();
 };
