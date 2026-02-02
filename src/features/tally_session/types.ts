@@ -30,3 +30,8 @@ export type CreateTallySessionInput = {
   notes?: string;
   species: SpeciesRequirement[];
 };
+
+export type Project = {
+  project_name: string;
+  species_data: Record<string, string> | { error: string; raw: string };
+};
