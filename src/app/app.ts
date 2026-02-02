@@ -28,6 +28,9 @@ const todayISO = (): string => new Date().toISOString().slice(0, 10);
 const formatTime = (timestamp: number): string =>
   new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+const formatDateTime = (timestamp: number): string =>
+  new Date(timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+
 const formatRatioText = (ratio: number, overall: number): string => {
   if (overall === 0) {
     return '—';
@@ -97,7 +100,6 @@ export const initApp = (): void => {
 
     const header = createElement('h1', { text: 'Tree Tally' });
     const actionCard = createElement('section', { className: 'card' });
-    const formCard = createElement('section', { className: 'card' });
     const listCard = createElement('section', { className: 'card' });
     const sessionsCard = createElement('section', { className: 'card' });
     const syncCard = createElement('section', { className: 'card' });
@@ -107,41 +109,6 @@ export const initApp = (): void => {
     startSessionButton.type = 'button';
     startSessionButton.addEventListener('click', () => navigate({ view: 'new-session' }));
     actionCard.append(startSessionButton);
-
-    const form = document.createElement('form');
-    const dateField = createElement('input') as HTMLInputElement;
-    dateField.type = 'date';
-    dateField.required = true;
-    dateField.value = todayISO();
-
-    const treesField = createElement('input') as HTMLInputElement;
-    treesField.type = 'number';
-    treesField.min = '1';
-    treesField.placeholder = 'Trees planted';
-    treesField.required = true;
-
-    const blockField = createElement('input') as HTMLInputElement;
-    blockField.placeholder = 'Block name (optional)';
-
-    const notesField = document.createElement('textarea');
-    notesField.rows = 3;
-    notesField.placeholder = 'Notes (optional)';
-
-    const submitButton = createElement('button', { text: 'Save tally' }) as HTMLButtonElement;
-    submitButton.type = 'submit';
-
-    form.append(
-      createElement('label', { text: 'Date' }),
-      dateField,
-      createElement('label', { text: 'Trees' }),
-      treesField,
-      createElement('label', { text: 'Block name' }),
-      blockField,
-      createElement('label', { text: 'Notes' }),
-      notesField,
-      submitButton
-    );
-    formCard.append(form);
 
     const listTitle = createElement('h2', { text: 'Today' });
     const tallyList = createElement('div', { className: 'tally-list' });
@@ -175,10 +142,11 @@ export const initApp = (): void => {
     });
     debugCard.append(createElement('h2', { text: 'Debug' }), downloadLogsButton);
 
-    root.append(header, actionCard, formCard, listCard, sessionsCard, syncCard, debugCard);
+    root.append(header, actionCard, listCard, sessionsCard, syncCard, debugCard);
 
     const refreshTallies = async (): Promise<void> => {
-      const date = dateField.value;
+      // Use today's date for listing simple tallies since the date picker is gone
+      const date = todayISO();
       const tallies = await listTalliesByDate(date);
       tallyList.innerHTML = '';
       if (tallies.length === 0) {
@@ -202,7 +170,7 @@ export const initApp = (): void => {
         const title = createElement('div', { text: session.block_name });
         const meta = createElement('div', {
           className: 'tally-meta',
-          text: `${session.species.length} species · ${formatTime(session.created_at)} · ${session.sync_status}`,
+          text: `${session.species.length} species · ${formatDateTime(session.created_at)} · ${session.sync_status}`,
         });
         item.append(title, meta);
         item.addEventListener('click', () => navigate({ view: 'session-detail', sessionId: session.session_id }));
@@ -227,28 +195,6 @@ export const initApp = (): void => {
     const refreshAll = async (): Promise<void> => {
       await Promise.all([refreshTallies(), refreshSessions(), refreshCounts()]);
     };
-
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      submitButton.disabled = true;
-      const input: CreateTallyInput = {
-        date: dateField.value,
-        trees: Number(treesField.value),
-        notes: notesField.value,
-        block_name: blockField.value,
-      };
-      logUserAction('Create Local Tally', input);
-
-      await createLocalTally(input);
-      form.reset();
-      dateField.value = input.date;
-      submitButton.disabled = false;
-      await refreshAll();
-    });
-
-    dateField.addEventListener('change', () => {
-      refreshTallies();
-    });
 
     const handleSync = async () => {
       logUserAction('Sync started');
@@ -297,6 +243,12 @@ export const initApp = (): void => {
 
     const card = createElement('section', { className: 'card' });
     const form = document.createElement('form');
+
+    const dateField = createElement('input') as HTMLInputElement;
+    dateField.type = 'date';
+    const d = new Date();
+    dateField.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    dateField.required = true;
 
     const projectSelect = createElement('select') as HTMLSelectElement;
     const defaultOption = createElement('option', { text: 'Select a project...' });
@@ -392,6 +344,8 @@ export const initApp = (): void => {
     });
 
     form.append(
+      createElement('label', { text: 'Date' }),
+      dateField,
       createElement('label', { text: 'Project' }),
       projectSelect,
       createElement('label', { text: 'Block name' }),
@@ -419,6 +373,7 @@ export const initApp = (): void => {
         block_name: blockField.value,
         notes: notesField.value,
         species,
+        date: dateField.value,
       };
 
       logUserAction('Start Session', input);
