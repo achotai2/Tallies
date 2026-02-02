@@ -239,6 +239,13 @@ button + button {
   color: #64748b;
 }
 
+.app-logo {
+  height: 60px;
+  width: auto;
+  display: block;
+  margin: 0 0 12px;
+}
+
 @media (min-width: 640px) {
   .row {
     display: flex;

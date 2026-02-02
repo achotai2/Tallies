@@ -68,6 +68,14 @@ const renderTallyItem = (tally: TallyRecord): HTMLElement => {
   return item;
 };
 
+const createLogo = (): HTMLImageElement => {
+  const img = document.createElement('img');
+  img.src = '/Logo.png';
+  img.alt = 'Tree Tally';
+  img.className = 'app-logo';
+  return img;
+};
+
 type ViewState =
   | { view: 'home' }
   | { view: 'new-session' }
@@ -98,7 +106,7 @@ export const initApp = (): void => {
   const renderHome = async (): Promise<void> => {
     root.innerHTML = '';
 
-    const header = createElement('h1', { text: 'Tree Tally' });
+    const header = createLogo();
     const actionCard = createElement('section', { className: 'card' });
     const listCard = createElement('section', { className: 'card' });
     const sessionsCard = createElement('section', { className: 'card' });
@@ -384,7 +392,7 @@ export const initApp = (): void => {
     });
 
     card.append(form);
-    root.append(headerRow, card);
+    root.append(createLogo(), headerRow, card);
   };
 
   const renderSessionDetail = async (sessionId: string): Promise<void> => {
@@ -590,9 +598,9 @@ export const initApp = (): void => {
 
       editorForm.append(editorActions);
       editorCard.append(editorTitle, editorForm);
-      root.append(headerRow, metaCard, summaryCard, editorCard, bagupCard);
+      root.append(createLogo(), headerRow, metaCard, summaryCard, editorCard, bagupCard);
     } else {
-      root.append(headerRow, metaCard, summaryCard, bagupCard);
+      root.append(createLogo(), headerRow, metaCard, summaryCard, bagupCard);
     }
   };
 
