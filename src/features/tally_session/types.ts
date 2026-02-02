@@ -29,6 +29,7 @@ export type CreateTallySessionInput = {
   block_name: string;
   notes?: string;
   species: SpeciesRequirement[];
+  date?: string;
 };
 
 export type Project = {

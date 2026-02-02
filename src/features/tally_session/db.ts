@@ -23,9 +23,18 @@ const createUUID = (): string => {
 };
 
 export const createTallySession = async (input: CreateTallySessionInput): Promise<TallySession> => {
+  let created_at = Date.now();
+  if (input.date) {
+    const [year, month, day] = input.date.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    const now = new Date();
+    date.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+    created_at = date.getTime();
+  }
+
   const session: TallySession = {
     session_id: createUUID(),
-    created_at: Date.now(),
+    created_at,
     block_name: input.block_name.trim(),
     notes: input.notes?.trim() || undefined,
     species: input.species,
