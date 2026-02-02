@@ -1,4 +1,5 @@
-import { postTalliesBatch } from '../api/client';
+import { fetchProjects, postTalliesBatch } from '../api/client';
+import { saveProjects } from '../db';
 import {
   listSyncQueue,
   markTalliesError,
@@ -66,4 +67,16 @@ export const syncTallies = async (): Promise<{ synced: number; failed: number; s
   }
 
   return { synced, failed, skipped: false };
+};
+
+export const syncProjects = async (): Promise<void> => {
+  if (!navigator.onLine) {
+    return;
+  }
+  try {
+    const projects = await fetchProjects();
+    await saveProjects(projects);
+  } catch (error) {
+    console.error('Failed to sync projects', error);
+  }
 };

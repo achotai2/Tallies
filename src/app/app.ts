@@ -1,4 +1,5 @@
 import { createElement } from '../ui/dom';
+import { listProjects } from '../db';
 import {
   createLocalTally,
   listTalliesByDate,
@@ -19,7 +20,7 @@ import {
 import type { Bagup, CreateTallySessionInput, SpeciesRequirement } from '../features/tally_session/types';
 import { buildElapsedMap, calculateRatios, calculateTotals, formatDuration } from '../features/tally_session/calculations';
 import { createSpeciesEditorRow, createSpeciesSummaryRow } from '../features/tally_session/ui';
-import { syncTallies } from '../sync/sync';
+import { syncProjects, syncTallies } from '../sync/sync';
 
 const todayISO = (): string => new Date().toISOString().slice(0, 10);
 
@@ -238,6 +239,7 @@ export const initApp = (): void => {
       syncButton.disabled = true;
       retryButton.disabled = true;
       syncMessage.textContent = navigator.onLine ? 'Syncing...' : 'Offline. Will retry later.';
+      await syncProjects();
       const result = await syncTallies();
       if (result.skipped) {
         syncMessage.textContent = 'Offline. Tallies will sync when back online.';
@@ -260,6 +262,8 @@ export const initApp = (): void => {
   const renderNewSession = async (): Promise<void> => {
     root.innerHTML = '';
 
+    const projects = await listProjects();
+
     const headerRow = createElement('div', { className: 'header-row' });
     const backButton = createElement('button', { text: 'Back' }) as HTMLButtonElement;
     backButton.type = 'button';
@@ -276,6 +280,16 @@ export const initApp = (): void => {
 
     const card = createElement('section', { className: 'card' });
     const form = document.createElement('form');
+
+    const projectSelect = createElement('select') as HTMLSelectElement;
+    const defaultOption = createElement('option', { text: 'Select a project...' });
+    defaultOption.value = '';
+    projectSelect.append(defaultOption);
+    projects.forEach((p) => {
+      const opt = createElement('option', { text: p.project_name });
+      opt.value = p.project_name;
+      projectSelect.append(opt);
+    });
 
     const blockField = createElement('input') as HTMLInputElement;
     blockField.placeholder = 'Block name';
@@ -329,7 +343,38 @@ export const initApp = (): void => {
 
     addSpeciesRow();
 
+    projectSelect.addEventListener('change', () => {
+      const selectedProjectName = projectSelect.value;
+      const project = projects.find((p) => p.project_name === selectedProjectName);
+      if (!project) return;
+
+      blockField.value = project.project_name;
+
+      rows.forEach((row) => row.row.remove());
+      rows.length = 0;
+
+      const speciesData = project.species_data;
+      if ('error' in speciesData) {
+        addSpeciesRow();
+        return;
+      }
+
+      Object.entries(speciesData).forEach(([code, name]) => {
+        addSpeciesRow({
+          species_code: code,
+          display_name: name,
+          required_ratio: 0,
+        });
+      });
+
+      if (rows.length === 0) {
+        addSpeciesRow();
+      }
+    });
+
     form.append(
+      createElement('label', { text: 'Project' }),
+      projectSelect,
       createElement('label', { text: 'Block name' }),
       blockField,
       createElement('label', { text: 'Notes' }),

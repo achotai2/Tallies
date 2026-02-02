@@ -1,11 +1,12 @@
 import Dexie, { type Table } from 'dexie';
 import type { TallyRecord } from '../features/tallies/types';
-import type { Bagup, TallySession } from '../features/tally_session/types';
+import type { Bagup, TallySession, Project } from '../features/tally_session/types';
 
 class TalliesDatabase extends Dexie {
   tallies!: Table<TallyRecord, string>;
   tally_sessions!: Table<TallySession, string>;
   bagups!: Table<Bagup, string>;
+  projects!: Table<Project, string>;
 
   constructor() {
     super('tallies-db');
@@ -17,6 +18,13 @@ class TalliesDatabase extends Dexie {
       tallies: 'client_id, date, created_at, sync_status',
       tally_sessions: 'session_id, created_at, sync_status',
       bagups: 'bagup_id, session_id, created_at, sync_status, [session_id+created_at]',
+    });
+    // v3 adds projects table for syncing project details
+    this.version(3).stores({
+      tallies: 'client_id, date, created_at, sync_status',
+      tally_sessions: 'session_id, created_at, sync_status',
+      bagups: 'bagup_id, session_id, created_at, sync_status, [session_id+created_at]',
+      projects: 'project_name',
     });
   }
 }
@@ -142,4 +150,17 @@ export const getBagupsByStatus = async (statuses: Bagup['sync_status'][]): Promi
 export const countBagupsByStatus = async (status: Bagup['sync_status']): Promise<number> => {
   await initDb();
   return db.bagups.where('sync_status').equals(status).count();
+};
+
+export const saveProjects = async (projects: Project[]): Promise<void> => {
+  await initDb();
+  await db.transaction('rw', db.projects, async () => {
+    await db.projects.clear();
+    await db.projects.bulkPut(projects);
+  });
+};
+
+export const listProjects = async (): Promise<Project[]> => {
+  await initDb();
+  return db.projects.toArray();
 };
