@@ -16,13 +16,14 @@ import {
 
 const BATCH_SIZE = 20;
 
-export const syncTallies = async (): Promise<{ synced: number; failed: number; skipped: boolean }> => {
+export const syncTallies = async (): Promise<{ synced: number; failed: number; skipped: boolean; errors: string[] }> => {
   if (!navigator.onLine) {
-    return { synced: 0, failed: 0, skipped: true };
+    return { synced: 0, failed: 0, skipped: true, errors: [] };
   }
 
   let synced = 0;
   let failed = 0;
+  const errors = new Set<string>();
 
   while (true) {
     const [pendingTallies, pendingSessions, pendingBagups] = await Promise.all([
@@ -49,6 +50,7 @@ export const syncTallies = async (): Promise<{ synced: number; failed: number; s
       synced += pendingTallies.length + pendingSessions.length + pendingBagups.length;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Sync failed';
+      errors.add(message);
       await Promise.all([
         markTalliesError(pendingTallies, message),
         markSessionsError(pendingSessions, message),
@@ -66,7 +68,7 @@ export const syncTallies = async (): Promise<{ synced: number; failed: number; s
     }
   }
 
-  return { synced, failed, skipped: false };
+  return { synced, failed, skipped: false, errors: Array.from(errors) };
 };
 
 export const syncProjects = async (): Promise<void> => {
