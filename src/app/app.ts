@@ -21,6 +21,7 @@ import type { Bagup, CreateTallySessionInput, SpeciesRequirement } from '../feat
 import { buildElapsedMap, calculateRatios, calculateTotals, formatDuration } from '../features/tally_session/calculations';
 import { createSpeciesEditorRow, createSpeciesSummaryRow } from '../features/tally_session/ui';
 import { syncProjects, syncTallies } from '../sync/sync';
+import { logUserAction, downloadLogs } from '../logger';
 
 const todayISO = (): string => new Date().toISOString().slice(0, 10);
 
@@ -80,10 +81,13 @@ export const initApp = (): void => {
   const root = document.querySelector<HTMLDivElement>('#app');
   if (!root) return;
 
+  logUserAction('App initialized');
+
   let viewState: ViewState = { view: 'home' };
   let draftBagup: DraftBagup | null = null;
 
   const navigate = (state: ViewState): void => {
+    logUserAction('Navigate', state);
     viewState = state;
     void render();
   };
@@ -97,6 +101,7 @@ export const initApp = (): void => {
     const listCard = createElement('section', { className: 'card' });
     const sessionsCard = createElement('section', { className: 'card' });
     const syncCard = createElement('section', { className: 'card' });
+    const debugCard = createElement('section', { className: 'card' });
 
     const startSessionButton = createElement('button', { text: 'Start New Tally' }) as HTMLButtonElement;
     startSessionButton.type = 'button';
@@ -161,7 +166,16 @@ export const initApp = (): void => {
 
     syncCard.append(syncTitle, statusRow, syncButton, retryButton, syncMessage);
 
-    root.append(header, actionCard, formCard, listCard, sessionsCard, syncCard);
+    const downloadLogsButton = createElement('button', { text: 'Download Logs' }) as HTMLButtonElement;
+    downloadLogsButton.className = 'secondary';
+    downloadLogsButton.type = 'button';
+    downloadLogsButton.addEventListener('click', () => {
+      logUserAction('Download Logs clicked');
+      downloadLogs();
+    });
+    debugCard.append(createElement('h2', { text: 'Debug' }), downloadLogsButton);
+
+    root.append(header, actionCard, formCard, listCard, sessionsCard, syncCard, debugCard);
 
     const refreshTallies = async (): Promise<void> => {
       const date = dateField.value;
@@ -223,6 +237,7 @@ export const initApp = (): void => {
         notes: notesField.value,
         block_name: blockField.value,
       };
+      logUserAction('Create Local Tally', input);
 
       await createLocalTally(input);
       form.reset();
@@ -236,6 +251,7 @@ export const initApp = (): void => {
     });
 
     const handleSync = async () => {
+      logUserAction('Sync started');
       syncButton.disabled = true;
       retryButton.disabled = true;
       syncMessage.textContent = navigator.onLine ? 'Syncing...' : 'Offline. Will retry later.';
@@ -243,10 +259,13 @@ export const initApp = (): void => {
       const result = await syncTallies();
       if (result.skipped) {
         syncMessage.textContent = 'Offline. Tallies will sync when back online.';
+        logUserAction('Sync skipped (offline)');
       } else if (result.failed > 0) {
-        syncMessage.textContent = `Sync finished with ${result.failed} failures.`;
+        syncMessage.textContent = `Sync finished with ${result.failed} failures. ${result.errors.length > 0 ? 'Errors: ' + result.errors.join(', ') : ''}`;
+        logUserAction('Sync finished with failures', result);
       } else {
         syncMessage.textContent = `Synced ${result.synced} records.`;
+        logUserAction('Sync finished successfully', result);
       }
       syncButton.disabled = false;
       retryButton.disabled = false;
@@ -269,10 +288,8 @@ export const initApp = (): void => {
     backButton.type = 'button';
     backButton.className = 'secondary compact';
     backButton.addEventListener('click', async () => {
-      if (draftForSession) {
-        await removeBagup(draftForSession.bagupId);
-        draftBagup = null;
-      }
+      // FIX: Removed draftForSession check which was crashing
+      logUserAction('Back button clicked in New Session');
       navigate({ view: 'home' });
     });
     const title = createElement('h1', { text: 'New Tally Session' });
@@ -348,6 +365,8 @@ export const initApp = (): void => {
       const project = projects.find((p) => p.project_name === selectedProjectName);
       if (!project) return;
 
+      logUserAction('Project selected', { projectName: selectedProjectName });
+
       blockField.value = project.project_name;
 
       rows.forEach((row) => row.row.remove());
@@ -402,6 +421,7 @@ export const initApp = (): void => {
         species,
       };
 
+      logUserAction('Start Session', input);
       saveButton.disabled = true;
       const session = await createTallySession(input);
       saveButton.disabled = false;
@@ -450,7 +470,10 @@ export const initApp = (): void => {
     const backButton = createElement('button', { text: 'Back' }) as HTMLButtonElement;
     backButton.type = 'button';
     backButton.className = 'secondary compact';
-    backButton.addEventListener('click', () => navigate({ view: 'home' }));
+    backButton.addEventListener('click', () => {
+      logUserAction('Back from Session Detail');
+      navigate({ view: 'home' });
+    });
     const title = createElement('h1', { text: session.block_name });
     const addBagupButton = createElement('button', { text: '+' }) as HTMLButtonElement;
     addBagupButton.type = 'button';
@@ -544,6 +567,7 @@ export const initApp = (): void => {
       if (draftBagup) {
         return;
       }
+      logUserAction('Add Bagup clicked');
       const speciesCodes = session.species.map((species) => species.species_code);
       const bagup = await createBagup(sessionId, speciesCodes);
       draftBagup = {
@@ -593,6 +617,7 @@ export const initApp = (): void => {
       editorActions.append(cancelButton, saveButton);
 
       cancelButton.addEventListener('click', async () => {
+        logUserAction('Cancel Bagup');
         await removeBagup(draftForSession.bagupId);
         draftBagup = null;
         await renderSessionDetail(sessionId);
@@ -600,6 +625,7 @@ export const initApp = (): void => {
 
       editorForm.addEventListener('submit', async (event) => {
         event.preventDefault();
+        logUserAction('Save Bagup', draftForSession.counts);
         saveButton.disabled = true;
         await saveBagupCounts(draftForSession.bagupId, draftForSession.counts);
         draftBagup = null;
@@ -607,7 +633,8 @@ export const initApp = (): void => {
         await renderSessionDetail(sessionId);
       });
 
-      editorCard.append(editorTitle, editorForm, editorActions);
+      editorForm.append(editorActions);
+      editorCard.append(editorTitle, editorForm);
       root.append(headerRow, metaCard, summaryCard, editorCard, bagupCard);
     } else {
       root.append(headerRow, metaCard, summaryCard, bagupCard);

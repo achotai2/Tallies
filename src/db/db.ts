@@ -135,7 +135,7 @@ export const getBagupsBySession = async (session_id: string): Promise<Bagup[]> =
     .where('[session_id+created_at]')
     .between([session_id, Dexie.minKey], [session_id, Dexie.maxKey])
     .reverse()
-    .sortBy('created_at');
+    .toArray();
 };
 
 export const getBagupsByStatus = async (statuses: Bagup['sync_status'][]): Promise<Bagup[]> => {
