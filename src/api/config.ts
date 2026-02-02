@@ -1,1 +1,1 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://script.google.com/macros/s/AKfycbxDcDdxog0J713kdiMBHWbnelmDa0lGf8JwYMKEGKP1H5ok3t_wsdOyu9-KcLWgXZvZ/exec';
+export const API_BASE_URL = (import.meta.env && import.meta.env.VITE_API_BASE_URL) || 'https://script.google.com/macros/s/AKfycbxDcDdxog0J713kdiMBHWbnelmDa0lGf8JwYMKEGKP1H5ok3t_wsdOyu9-KcLWgXZvZ/exec';

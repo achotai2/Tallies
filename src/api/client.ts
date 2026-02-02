@@ -12,7 +12,7 @@ export const postTalliesBatch = async (payload: TalliesBatchPayload): Promise<vo
   const response = await fetch(API_BASE_URL, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'text/plain',
     },
     body: JSON.stringify(payload),
   });
