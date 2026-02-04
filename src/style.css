@@ -200,6 +200,13 @@ button + button {
   font-size: 0.9rem;
 }
 
+.bagup-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
 .bagup-item {
   border: 1px solid #e2e8f0;
   border-radius: 12px;

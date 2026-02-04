@@ -308,6 +308,14 @@ export const initApp = (): void => {
     blockField.placeholder = 'Block name';
     blockField.required = true;
 
+    const supervisorField = createElement('input') as HTMLInputElement;
+    supervisorField.placeholder = 'Supervisor';
+
+    const targetDensityField = createElement('input') as HTMLInputElement;
+    targetDensityField.type = 'number';
+    targetDensityField.placeholder = 'Target Density';
+    targetDensityField.min = '0';
+
     const notesField = document.createElement('textarea');
     notesField.rows = 2;
     notesField.placeholder = 'Notes (optional)';
@@ -363,7 +371,7 @@ export const initApp = (): void => {
 
       logUserAction('Project selected', { projectName: selectedProjectName });
 
-      blockField.value = project.project_name;
+      // blockField.value = project.project_name;
 
       rows.forEach((row) => row.row.remove());
       rows.length = 0;
@@ -394,6 +402,10 @@ export const initApp = (): void => {
       projectSelect,
       createElement('label', { text: 'Block name' }),
       blockField,
+      createElement('label', { text: 'Supervisor' }),
+      supervisorField,
+      createElement('label', { text: 'Target Density' }),
+      targetDensityField,
       createElement('label', { text: 'Notes' }),
       notesField,
       createElement('label', { text: 'Species (code, name, required ratio)' }),
@@ -415,6 +427,9 @@ export const initApp = (): void => {
 
       const input: CreateTallySessionInput = {
         block_name: blockField.value,
+        project_name: projectSelect.value,
+        supervisor: supervisorField.value,
+        target_density: targetDensityField.value ? Number(targetDensityField.value) : undefined,
         notes: notesField.value,
         species,
         date: dateField.value,
@@ -480,7 +495,7 @@ export const initApp = (): void => {
     actionsContainer.style.display = 'flex';
     actionsContainer.style.gap = '8px';
 
-    const isEditable = session.sync_status === 'pending' || session.sync_status === 'error';
+    const isEditable = session.sync_status === 'draft' || session.sync_status === 'pending' || session.sync_status === 'error';
 
     if (isEditable) {
       const finalizeButton = createElement('button', { text: 'Finalize' }) as HTMLButtonElement;
@@ -511,7 +526,7 @@ export const initApp = (): void => {
     addBagupButton.className = 'fab';
     addBagupButton.disabled = !isEditable;
 
-    headerRow.append(backButton, title, actionsContainer, addBagupButton);
+    headerRow.append(backButton, title, actionsContainer);
 
     const metaCard = createElement('section', { className: 'card' });
     const metaRow = createElement('div', { className: 'meta-row' });
@@ -520,6 +535,16 @@ export const initApp = (): void => {
       className: 'small',
       text: `Started ${new Date(session.created_at).toLocaleDateString()}`,
     });
+
+    if (session.project_name) {
+      metaRow.append(createElement('div', { className: 'small', text: `Project: ${session.project_name}` }));
+    }
+    if (session.supervisor) {
+      metaRow.append(createElement('div', { className: 'small', text: `Supervisor: ${session.supervisor}` }));
+    }
+    if (session.target_density) {
+      metaRow.append(createElement('div', { className: 'small', text: `Target Density: ${session.target_density}` }));
+    }
 
     const statusLabel = createElement('div', { className: 'small', text: `Status: ${session.sync_status}` });
 
@@ -542,7 +567,7 @@ export const initApp = (): void => {
     const bagupCard = createElement('section', { className: 'card' });
     const bagupTitleRow = createElement('div', { className: 'bagup-title-row' });
     const bagupTitle = createElement('h2', { text: 'Bagups' });
-    bagupTitleRow.append(bagupTitle);
+    bagupTitleRow.append(bagupTitle, addBagupButton);
     const bagupList = createElement('div', { className: 'tally-list' });
     bagupCard.append(bagupTitleRow, bagupList);
 

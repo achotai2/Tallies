@@ -36,9 +36,12 @@ export const createTallySession = async (input: CreateTallySessionInput): Promis
     session_id: createUUID(),
     created_at,
     block_name: input.block_name.trim(),
+    project_name: input.project_name?.trim(),
+    supervisor: input.supervisor?.trim(),
+    target_density: input.target_density,
     notes: input.notes?.trim() || undefined,
     species: input.species,
-    sync_status: 'pending',
+    sync_status: 'draft',
   };
 
   await addTallySession(session);
@@ -60,20 +63,22 @@ export const listSessionSyncQueue = async (limit = 20): Promise<TallySession[]> 
 
 export const listSessionSyncCounts = async (): Promise<{
   pending: number;
+  draft: number;
   synced: number;
   error: number;
   finalized: number;
   archived: number;
 }> => {
-  const [pending, synced, error, finalized, archived] = await Promise.all([
+  const [pending, draft, synced, error, finalized, archived] = await Promise.all([
     countSessionsByStatus('pending'),
+    countSessionsByStatus('draft'),
     countSessionsByStatus('synced'),
     countSessionsByStatus('error'),
     countSessionsByStatus('finalized'),
     countSessionsByStatus('archived'),
   ]);
 
-  return { pending, synced, error, finalized, archived };
+  return { pending, draft, synced, error, finalized, archived };
 };
 
 export const markSessionsSynced = async (sessions: TallySession[]): Promise<void> => {
