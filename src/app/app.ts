@@ -70,7 +70,7 @@ const renderTallyItem = (tally: TallyRecord): HTMLElement => {
 
 const createLogo = (): HTMLImageElement => {
   const img = document.createElement('img');
-  img.src = '/Logo.png';
+  img.src = '/Icon.png';
   img.alt = 'Tree Tally';
   img.className = 'app-logo';
   return img;
