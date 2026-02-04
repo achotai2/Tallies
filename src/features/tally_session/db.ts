@@ -54,7 +54,7 @@ export const fetchTallySession = async (session_id: string): Promise<TallySessio
 };
 
 export const listSessionSyncQueue = async (limit = 20): Promise<TallySession[]> => {
-  const sessions = await getTallySessionsByStatus(['pending', 'error']);
+  const sessions = await getTallySessionsByStatus(['finalized', 'error']);
   return sessions.slice(0, limit);
 };
 
@@ -62,14 +62,18 @@ export const listSessionSyncCounts = async (): Promise<{
   pending: number;
   synced: number;
   error: number;
+  finalized: number;
+  archived: number;
 }> => {
-  const [pending, synced, error] = await Promise.all([
+  const [pending, synced, error, finalized, archived] = await Promise.all([
     countSessionsByStatus('pending'),
     countSessionsByStatus('synced'),
     countSessionsByStatus('error'),
+    countSessionsByStatus('finalized'),
+    countSessionsByStatus('archived'),
   ]);
 
-  return { pending, synced, error };
+  return { pending, synced, error, finalized, archived };
 };
 
 export const markSessionsSynced = async (sessions: TallySession[]): Promise<void> => {
@@ -119,7 +123,7 @@ export const listBagupsForSession = async (session_id: string): Promise<Bagup[]>
 };
 
 export const listBagupSyncQueue = async (limit = 20): Promise<Bagup[]> => {
-  const bagups = await getBagupsByStatus(['pending', 'error']);
+  const bagups = await getBagupsByStatus(['finalized', 'error']);
   return bagups.slice(0, limit);
 };
 
@@ -147,4 +151,38 @@ export const markBagupsError = async (bagups: Bagup[], error: string): Promise<v
   await Promise.all(
     bagups.map((bagup) => updateBagup(bagup.bagup_id, { sync_status: 'error', sync_error: error }))
   );
+};
+
+export const finalizeSession = async (session_id: string): Promise<void> => {
+  const session = await getTallySession(session_id);
+  if (!session) return;
+
+  await updateTallySession(session_id, { sync_status: 'finalized', sync_error: undefined });
+
+  const bagups = await getBagupsBySession(session_id);
+  await Promise.all(
+    bagups
+      .filter((b) => b.sync_status === 'pending' || b.sync_status === 'error')
+      .map((b) => updateBagup(b.bagup_id, { sync_status: 'finalized', sync_error: undefined }))
+  );
+};
+
+export const archiveSession = async (session_id: string): Promise<void> => {
+  await updateTallySession(session_id, { sync_status: 'archived' });
+};
+
+export const getTallySessionsByFilter = async (filter: string): Promise<TallySession[]> => {
+  switch (filter) {
+    case 'Synced Sessions':
+      return getTallySessionsByStatus(['synced']);
+    case 'Finalized Sessions':
+      return getTallySessionsByStatus(['finalized']);
+    case 'Archived Sessions':
+      return getTallySessionsByStatus(['archived']);
+    case 'Error Sessions':
+      return getTallySessionsByStatus(['error']);
+    case 'All Sessions':
+    default:
+      return getTallySessionsByCreatedAt();
+  }
 };

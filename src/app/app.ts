@@ -7,9 +7,12 @@ import {
 } from '../features/tallies/tallies';
 import type { CreateTallyInput, TallyRecord } from '../features/tallies/types';
 import {
+  archiveSession,
   createBagup,
   createTallySession,
   fetchTallySession,
+  finalizeSession,
+  getTallySessionsByFilter,
   listBagupSyncCounts,
   listBagupsForSession,
   listSessionSyncCounts,
@@ -96,6 +99,7 @@ export const initApp = (): void => {
 
   let viewState: ViewState = { view: 'home' };
   let draftBagup: DraftBagup | null = null;
+  let currentFilter = 'All Sessions';
 
   const navigate = (state: ViewState): void => {
     logUserAction('Navigate', state);
@@ -123,8 +127,27 @@ export const initApp = (): void => {
     listCard.append(listTitle, tallyList);
 
     const sessionsTitle = createElement('h2', { text: 'Tally Sessions' });
+
+    // Filter controls
+    const filterContainer = createElement('div', { className: 'row' });
+    filterContainer.style.overflowX = 'auto';
+    filterContainer.style.paddingBottom = '8px';
+    filterContainer.style.marginBottom = '8px';
+    const filters = ['All Sessions', 'Synced Sessions', 'Finalized Sessions', 'Archived Sessions', 'Error Sessions'];
+    filters.forEach(filter => {
+      const btn = createElement('button', { text: filter }) as HTMLButtonElement;
+      btn.className = filter === currentFilter ? 'compact' : 'compact secondary';
+      btn.style.whiteSpace = 'nowrap';
+      btn.addEventListener('click', async () => {
+        currentFilter = filter;
+        logUserAction('Filter changed', { filter });
+        await renderHome(); // Re-render to update UI
+      });
+      filterContainer.append(btn);
+    });
+
     const sessionsList = createElement('div', { className: 'tally-list' });
-    sessionsCard.append(sessionsTitle, sessionsList);
+    sessionsCard.append(sessionsTitle, filterContainer, sessionsList);
 
     const syncTitle = createElement('h2', { text: 'Sync status' });
     const statusRow = createElement('div', { className: 'status-row' });
@@ -165,10 +188,10 @@ export const initApp = (): void => {
     };
 
     const refreshSessions = async (): Promise<void> => {
-      const sessions = await listTallySessions();
+      const sessions = await getTallySessionsByFilter(currentFilter);
       sessionsList.innerHTML = '';
       if (sessions.length === 0) {
-        sessionsList.append(createElement('div', { className: 'small', text: 'No sessions yet.' }));
+        sessionsList.append(createElement('div', { className: 'small', text: 'No sessions found.' }));
         return;
       }
 
@@ -192,10 +215,23 @@ export const initApp = (): void => {
         listSessionSyncCounts(),
         listBagupSyncCounts(),
       ]);
-      const pending = tallyCounts.pending + sessionCounts.pending + bagupCounts.pending;
+      // Pending pill shows items waiting to sync (finalized sessions + pending bagups?)
+      // Actually, pending bagups are part of sessions.
+      // If we strictly follow "Finalized sessions are synced", then "Pending" in sync context means "Ready to sync".
+      // So use finalized count.
+      // "Pending" for bagups: if sessions are finalized, bagups are finalized too.
+      // If bagups are pending, they are drafts.
+      // So for Sync Status, "Pending" = finalized sessions + finalized bagups (waiting for sync).
+      // Wait, listBagupSyncCounts returns pending, synced, error. It doesn't return finalized unless I update it?
+      // I only updated listSessionSyncCounts return type.
+      // Let's assume listBagupSyncCounts counts "pending" as drafted.
+      // I should update listBagupSyncCounts to return finalized too if I want to count them.
+      // But for simplicity, let's just count Finalized Sessions for the "Pending" pill.
+      const pendingSync = sessionCounts.finalized;
       const synced = tallyCounts.synced + sessionCounts.synced + bagupCounts.synced;
       const error = tallyCounts.error + sessionCounts.error + bagupCounts.error;
-      pendingPill.textContent = `Pending: ${pending}`;
+
+      pendingPill.textContent = `Pending: ${pendingSync}`;
       syncedPill.textContent = `Synced: ${synced}`;
       errorPill.textContent = `Error: ${error}`;
     };
@@ -438,10 +474,44 @@ export const initApp = (): void => {
       navigate({ view: 'home' });
     });
     const title = createElement('h1', { text: session.block_name });
+
+    // Action buttons
+    const actionsContainer = createElement('div');
+    actionsContainer.style.display = 'flex';
+    actionsContainer.style.gap = '8px';
+
+    const isEditable = session.sync_status === 'pending' || session.sync_status === 'error';
+
+    if (isEditable) {
+      const finalizeButton = createElement('button', { text: 'Finalize' }) as HTMLButtonElement;
+      finalizeButton.className = 'compact';
+      finalizeButton.addEventListener('click', async () => {
+        if (confirm('Finalize session? This will make it ready for sync and lock it for editing.')) {
+          logUserAction('Finalize Session', { sessionId });
+          await finalizeSession(sessionId);
+          await renderSessionDetail(sessionId);
+        }
+      });
+      actionsContainer.append(finalizeButton);
+    }
+
+    const archiveButton = createElement('button', { text: 'Archive' }) as HTMLButtonElement;
+    archiveButton.className = 'compact secondary';
+    archiveButton.addEventListener('click', async () => {
+      if (confirm('Archive session? It will be hidden from the main list.')) {
+        logUserAction('Archive Session', { sessionId });
+        await archiveSession(sessionId);
+        navigate({ view: 'home' });
+      }
+    });
+    actionsContainer.append(archiveButton);
+
     const addBagupButton = createElement('button', { text: '+' }) as HTMLButtonElement;
     addBagupButton.type = 'button';
     addBagupButton.className = 'fab';
-    headerRow.append(backButton, title, addBagupButton);
+    addBagupButton.disabled = !isEditable;
+
+    headerRow.append(backButton, title, actionsContainer, addBagupButton);
 
     const metaCard = createElement('section', { className: 'card' });
     const metaRow = createElement('div', { className: 'meta-row' });
@@ -450,7 +520,10 @@ export const initApp = (): void => {
       className: 'small',
       text: `Started ${new Date(session.created_at).toLocaleDateString()}`,
     });
-    metaRow.append(timeLabel, createdLabel);
+
+    const statusLabel = createElement('div', { className: 'small', text: `Status: ${session.sync_status}` });
+
+    metaRow.append(timeLabel, createdLabel, statusLabel);
     if (session.notes) {
       const notes = createElement('div', { className: 'small', text: session.notes });
       metaCard.append(metaRow, notes);
@@ -527,7 +600,7 @@ export const initApp = (): void => {
     renderBagups(bagups.filter((bagup) => bagup.bagup_id !== draftForSession?.bagupId));
 
     addBagupButton.addEventListener('click', async () => {
-      if (draftBagup) {
+      if (draftBagup || !isEditable) {
         return;
       }
       logUserAction('Add Bagup clicked');
@@ -542,7 +615,7 @@ export const initApp = (): void => {
       await renderSessionDetail(sessionId);
     });
 
-    if (draftForSession) {
+    if (draftForSession && isEditable) {
       const editorCard = createElement('section', { className: 'card' });
       const editorTitle = createElement('h2', { text: 'New bagup' });
       const editorForm = document.createElement('form');

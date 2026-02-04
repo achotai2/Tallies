@@ -1,4 +1,4 @@
-export type SyncStatus = 'pending' | 'synced' | 'error';
+export type SyncStatus = 'pending' | 'synced' | 'error' | 'finalized' | 'archived';
 
 export type SpeciesRequirement = {
   species_code: string;
