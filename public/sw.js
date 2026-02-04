@@ -1,5 +1,5 @@
-const CACHE_NAME = 'tree-tally-shell-v2';
-const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/Icon.png'];
+const CACHE_NAME = 'tree-tally-shell-v3';
+const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/Icon.png', '/Logo.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
