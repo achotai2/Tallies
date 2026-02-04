@@ -1,4 +1,4 @@
-export type SyncStatus = 'pending' | 'synced' | 'error' | 'finalized' | 'archived';
+export type SyncStatus = 'pending' | 'draft' | 'synced' | 'error' | 'finalized' | 'archived';
 
 export type SpeciesRequirement = {
   species_code: string;
@@ -10,6 +10,9 @@ export type TallySession = {
   session_id: string;
   created_at: number;
   block_name: string;
+  project_name?: string;
+  supervisor?: string;
+  target_density?: number;
   notes?: string;
   species: SpeciesRequirement[];
   sync_status: SyncStatus;
@@ -27,6 +30,9 @@ export type Bagup = {
 
 export type CreateTallySessionInput = {
   block_name: string;
+  project_name?: string;
+  supervisor?: string;
+  target_density?: number;
   notes?: string;
   species: SpeciesRequirement[];
   date?: string;
