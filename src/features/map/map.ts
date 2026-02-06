@@ -16,16 +16,44 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 });
 
-export const initMap = (container: HTMLElement) => {
+export const initMap = (container: HTMLElement): (() => void) => {
   // Center map on a default location (e.g., world or specific region)
-  const map = L.map(container).setView([-1.9441, 30.0619], 13); // Defaulting to Kigali, Rwanda as it seems relevant to previous context or just a placeholder
+  const map = L.map(container).setView([-1.9441, 30.0619], 13); // Defaulting to Kigali, Rwanda
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map);
 
-  // Add GPS Button
   let gpsMarker: L.Marker | null = null;
+  let userLocation: L.LatLng | null = null;
+  let watchId: number | null = null;
+
+  // Watch Position
+  if (navigator.geolocation) {
+    watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        userLocation = L.latLng(latitude, longitude);
+
+        if (gpsMarker) {
+          gpsMarker.setLatLng(userLocation);
+        } else {
+          gpsMarker = L.marker(userLocation).addTo(map)
+            .bindPopup('You are here');
+        }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 10000
+      }
+    );
+  }
+
+  // Add GPS Button
   const gpsControl = new L.Control({ position: 'topleft' });
   gpsControl.onAdd = function() {
     const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
@@ -45,26 +73,13 @@ export const initMap = (container: HTMLElement) => {
 
     L.DomEvent.on(button, 'click', function(e) {
       L.DomEvent.stop(e);
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const { latitude, longitude } = position.coords;
-            map.setView([latitude, longitude], 16);
-            if (gpsMarker) {
-              gpsMarker.setLatLng([latitude, longitude]);
-            } else {
-              gpsMarker = L.marker([latitude, longitude]).addTo(map)
-                .bindPopup('You are here');
-            }
-            gpsMarker.openPopup();
-          },
-          (error) => {
-            console.error('Geolocation error:', error);
-            alert('Could not get your location.');
-          }
-        );
+      if (userLocation) {
+        map.setView(userLocation, 16);
+        if (gpsMarker) {
+          gpsMarker.openPopup();
+        }
       } else {
-        alert("Geolocation is not supported by this browser.");
+        alert('Location not available yet.');
       }
     });
 
@@ -102,7 +117,18 @@ export const initMap = (container: HTMLElement) => {
             const parser = new DOMParser();
             const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
             const geojson = toGeoJSON.kml(kmlDoc);
-            const layer = L.geoJSON(geojson).addTo(map);
+            const layer = L.geoJSON(geojson, {
+              onEachFeature: (feature, layer) => {
+                if (feature.properties) {
+                   let popupContent = '<div style="max-height: 200px; overflow-y: auto;"><table>';
+                   for (const key in feature.properties) {
+                     popupContent += `<tr><td><strong>${key}</strong></td><td>${feature.properties[key]}</td></tr>`;
+                   }
+                   popupContent += '</table></div>';
+                   layer.bindPopup(popupContent);
+                }
+              }
+            }).addTo(map);
             bounds.extend(layer.getBounds());
           }
 
@@ -126,4 +152,12 @@ export const initMap = (container: HTMLElement) => {
   setTimeout(() => {
     map.invalidateSize();
   }, 100);
+
+  // Cleanup function
+  return () => {
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+    }
+    map.remove();
+  };
 };
