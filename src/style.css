@@ -281,3 +281,11 @@ button + button {
     justify-content: flex-end;
   }
 }
+
+#map-container {
+  height: 400px;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  z-index: 1;
+}

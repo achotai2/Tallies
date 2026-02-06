@@ -9,7 +9,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "dexie": "^4.0.4"
+    "@tmcw/togeojson": "^7.1.2",
+    "@types/geojson": "^7946.0.16",
+    "@types/leaflet": "^1.9.21",
+    "dexie": "^4.0.4",
+    "jszip": "^3.10.1",
+    "leaflet": "^1.9.4"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

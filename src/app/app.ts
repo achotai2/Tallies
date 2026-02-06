@@ -25,6 +25,7 @@ import { buildElapsedMap, calculateRatios, calculateTotals, formatDuration } fro
 import { createSpeciesEditorRow, createSpeciesSummaryRow } from '../features/tally_session/ui';
 import { syncProjects, syncTallies } from '../sync/sync';
 import { logUserAction, downloadLogs } from '../logger';
+import { initMap } from '../features/map/map';
 
 const todayISO = (): string => new Date().toISOString().slice(0, 10);
 
@@ -114,6 +115,10 @@ export const initApp = (): void => {
     const actionCard = createElement('section', { className: 'card' });
     const listCard = createElement('section', { className: 'card' });
     const sessionsCard = createElement('section', { className: 'card' });
+    const mapCard = createElement('section', { className: 'card' });
+    const mapContainer = createElement('div');
+    mapContainer.id = 'map-container';
+    mapCard.append(mapContainer);
     const syncCard = createElement('section', { className: 'card' });
     const debugCard = createElement('section', { className: 'card' });
 
@@ -173,7 +178,8 @@ export const initApp = (): void => {
     });
     debugCard.append(createElement('h2', { text: 'Debug' }), downloadLogsButton);
 
-    root.append(header, actionCard, listCard, sessionsCard, syncCard, debugCard);
+    root.append(header, actionCard, listCard, sessionsCard, mapCard, syncCard, debugCard);
+    initMap(mapContainer);
 
     const refreshTallies = async (): Promise<void> => {
       // Use today's date for listing simple tallies since the date picker is gone
