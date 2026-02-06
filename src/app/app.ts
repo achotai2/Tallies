@@ -321,48 +321,22 @@ export const initApp = (): void => {
     notesField.placeholder = 'Notes (optional)';
 
     const speciesContainer = createElement('div', { className: 'species-container' });
-    const addSpeciesButton = createElement('button', { text: 'Add species' }) as HTMLButtonElement;
-    addSpeciesButton.type = 'button';
-    addSpeciesButton.className = 'secondary';
 
     const saveButton = createElement('button', { text: 'Start session' }) as HTMLButtonElement;
     saveButton.type = 'submit';
 
     const rows: Array<ReturnType<typeof createSpeciesEditorRow>> = [];
 
-    const updateRemoveButtons = () => {
-      const disable = rows.length <= 1;
-      rows.forEach((row) => {
-        row.removeButton.disabled = disable;
-      });
-    };
-
     const addSpeciesRow = (initial?: Partial<SpeciesRequirement>) => {
       const row = createSpeciesEditorRow({
         initial,
-        onRemove: () => {
-          if (rows.length <= 1) {
-            return;
-          }
-          const index = rows.indexOf(row);
-          if (index >= 0) {
-            rows.splice(index, 1);
-          }
-          row.row.remove();
-          updateRemoveButtons();
-        },
       });
       row.codeInput.required = true;
       row.nameInput.required = true;
       row.ratioInput.required = true;
       speciesContainer.append(row.row);
       rows.push(row);
-      updateRemoveButtons();
     };
-
-    addSpeciesButton.addEventListener('click', () => addSpeciesRow());
-
-    addSpeciesRow();
 
     projectSelect.addEventListener('change', () => {
       const selectedProjectName = projectSelect.value;
@@ -378,7 +352,8 @@ export const initApp = (): void => {
 
       const speciesData = project.species_data;
       if ('error' in speciesData) {
-        addSpeciesRow();
+        // If error or empty, we do not add rows.
+        // The user sees an empty species list, which is correct as they cannot add their own.
         return;
       }
 
@@ -389,10 +364,6 @@ export const initApp = (): void => {
           required_ratio: 0,
         });
       });
-
-      if (rows.length === 0) {
-        addSpeciesRow();
-      }
     });
 
     form.append(
@@ -410,7 +381,6 @@ export const initApp = (): void => {
       notesField,
       createElement('label', { text: 'Species (code, name, required ratio)' }),
       speciesContainer,
-      addSpeciesButton,
       saveButton
     );
 

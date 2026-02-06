@@ -2,22 +2,22 @@ import { createElement } from '../../ui/dom';
 import type { SpeciesRequirement } from './types';
 
 export const createSpeciesEditorRow = (options: {
-  onRemove: () => void;
   initial?: Partial<SpeciesRequirement>;
 }): {
   row: HTMLDivElement;
   codeInput: HTMLInputElement;
   nameInput: HTMLInputElement;
   ratioInput: HTMLInputElement;
-  removeButton: HTMLButtonElement;
 } => {
   const row = createElement('div', { className: 'species-row' });
   const codeInput = createElement('input') as HTMLInputElement;
   codeInput.placeholder = 'Code';
+  codeInput.readOnly = true;
   codeInput.value = options.initial?.species_code ?? '';
 
   const nameInput = createElement('input') as HTMLInputElement;
   nameInput.placeholder = 'Display name';
+  nameInput.readOnly = true;
   nameInput.value = options.initial?.display_name ?? '';
 
   const ratioInput = createElement('input') as HTMLInputElement;
@@ -27,14 +27,9 @@ export const createSpeciesEditorRow = (options: {
   ratioInput.placeholder = 'Required ratio';
   ratioInput.value = options.initial?.required_ratio?.toString() ?? '';
 
-  const removeButton = createElement('button', { text: 'Remove' }) as HTMLButtonElement;
-  removeButton.type = 'button';
-  removeButton.className = 'secondary compact';
-  removeButton.addEventListener('click', options.onRemove);
+  row.append(codeInput, nameInput, ratioInput);
 
-  row.append(codeInput, nameInput, ratioInput, removeButton);
-
-  return { row, codeInput, nameInput, ratioInput, removeButton };
+  return { row, codeInput, nameInput, ratioInput };
 };
 
 export const createSpeciesSummaryRow = (species: SpeciesRequirement): HTMLDivElement => {
