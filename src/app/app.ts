@@ -101,6 +101,7 @@ export const initApp = (): void => {
   let viewState: ViewState = { view: 'home' };
   let draftBagup: DraftBagup | null = null;
   let currentFilter = 'All Sessions';
+  let cleanupMap: (() => void) | null = null;
 
   const navigate = (state: ViewState): void => {
     logUserAction('Navigate', state);
@@ -109,6 +110,10 @@ export const initApp = (): void => {
   };
 
   const renderHome = async (): Promise<void> => {
+    if (cleanupMap) {
+      cleanupMap();
+      cleanupMap = null;
+    }
     root.innerHTML = '';
 
     const header = createLogo();
@@ -179,7 +184,7 @@ export const initApp = (): void => {
     debugCard.append(createElement('h2', { text: 'Debug' }), downloadLogsButton);
 
     root.append(header, actionCard, listCard, sessionsCard, mapCard, syncCard, debugCard);
-    initMap(mapContainer);
+    cleanupMap = initMap(mapContainer);
 
     const refreshTallies = async (): Promise<void> => {
       // Use today's date for listing simple tallies since the date picker is gone
@@ -679,6 +684,10 @@ export const initApp = (): void => {
   };
 
   const render = async (): Promise<void> => {
+    if (cleanupMap) {
+      cleanupMap();
+      cleanupMap = null;
+    }
     switch (viewState.view) {
       case 'home':
         await renderHome();
