@@ -24,7 +24,7 @@ export const initMap = (container: HTMLElement): (() => void) => {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map);
 
-  let gpsMarker: L.Marker | null = null;
+  let gpsMarker: L.CircleMarker | null = null;
   let userLocation: L.LatLng | null = null;
   let watchId: number | null = null;
 
@@ -38,7 +38,14 @@ export const initMap = (container: HTMLElement): (() => void) => {
         if (gpsMarker) {
           gpsMarker.setLatLng(userLocation);
         } else {
-          gpsMarker = L.marker(userLocation).addTo(map)
+          gpsMarker = L.circleMarker(userLocation, {
+            radius: 8,
+            fillColor: 'pink',
+            color: 'white',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8
+          }).addTo(map)
             .bindPopup('You are here');
         }
       },
@@ -121,8 +128,11 @@ export const initMap = (container: HTMLElement): (() => void) => {
               onEachFeature: (feature, layer) => {
                 if (feature.properties) {
                    let popupContent = '<div style="max-height: 200px; overflow-y: auto;"><table>';
-                   for (const key in feature.properties) {
-                     popupContent += `<tr><td><strong>${key}</strong></td><td>${feature.properties[key]}</td></tr>`;
+                   const displayFields = ['name', 'description'];
+                   for (const key of displayFields) {
+                     if (feature.properties[key]) {
+                       popupContent += `<tr><td><strong>${key}</strong></td><td>${feature.properties[key]}</td></tr>`;
+                     }
                    }
                    popupContent += '</table></div>';
                    layer.bindPopup(popupContent);
