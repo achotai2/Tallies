@@ -176,6 +176,13 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
 };
 
 export const addBagupMarkers = (map: L.Map, bagups: Bagup[], sessionName: string): void => {
+  const treeIcon = L.icon({
+    iconUrl: '/icons/tree-marker.svg',
+    iconSize: [30, 40],
+    iconAnchor: [15, 40],
+    popupAnchor: [0, -40],
+  });
+
   bagups.forEach((bagup) => {
     if (typeof bagup.lat === 'number' && typeof bagup.lng === 'number') {
       const date = new Date(bagup.created_at).toLocaleString();
@@ -187,14 +194,7 @@ export const addBagupMarkers = (map: L.Map, bagups: Bagup[], sessionName: string
        Time: ${date}<br>
        Species:<br>${speciesList}`;
 
-      L.circleMarker([bagup.lat, bagup.lng], {
-        radius: 6,
-        fillColor: '#3388ff',
-        color: 'white',
-        weight: 2,
-        opacity: 1,
-        fillOpacity: 0.8,
-      })
+      L.marker([bagup.lat, bagup.lng], { icon: treeIcon })
         .addTo(map)
         .bindPopup(content);
     }
