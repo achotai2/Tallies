@@ -176,8 +176,8 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
 };
 
 export const addBagupMarkers = (map: L.Map, bagups: Bagup[], sessionName: string): void => {
-  const treeIcon = L.icon({
-    iconUrl: '/icons/tree-marker.svg',
+  const triangleIcon = L.icon({
+    iconUrl: '/icons/triangle-pin.svg',
     iconSize: [30, 40],
     iconAnchor: [15, 40],
     popupAnchor: [0, -40],
@@ -194,7 +194,7 @@ export const addBagupMarkers = (map: L.Map, bagups: Bagup[], sessionName: string
        Time: ${date}<br>
        Species:<br>${speciesList}`;
 
-      L.marker([bagup.lat, bagup.lng], { icon: treeIcon })
+      L.marker([bagup.lat, bagup.lng], { icon: triangleIcon })
         .addTo(map)
         .bindPopup(content);
     }
