@@ -215,6 +215,14 @@ button + button {
   gap: 8px;
 }
 
+.bagup-item.clickable {
+  cursor: pointer;
+}
+
+.bagup-item.clickable:hover {
+  background-color: #f1f5f9;
+}
+
 .bagup-header {
   display: flex;
   justify-content: space-between;

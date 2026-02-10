@@ -645,6 +645,14 @@ export const initApp = (): void => {
       const elapsedMap = buildElapsedMap(items);
       items.forEach((bagup) => {
         const item = createElement('div', { className: 'bagup-item' });
+
+        if (typeof bagup.lat === 'number' && typeof bagup.lng === 'number') {
+          item.classList.add('clickable');
+          item.addEventListener('click', () => {
+            map.flyTo([bagup.lat!, bagup.lng!], 18);
+          });
+        }
+
         const header = createElement('div', { className: 'bagup-header' });
         const time = createElement('div', { text: formatTime(bagup.created_at) });
         const elapsed = createElement('div', { className: 'small', text: elapsedMap[bagup.bagup_id] });
