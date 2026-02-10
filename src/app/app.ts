@@ -1,5 +1,5 @@
 import { createElement } from '../ui/dom';
-import { listProjects } from '../db';
+import { listProjects, listSupervisors } from '../db';
 import {
   createLocalTally,
   listTalliesByDate,
@@ -282,7 +282,10 @@ export const initApp = (): void => {
   const renderNewSession = async (): Promise<void> => {
     root.innerHTML = '';
 
-    const projects = await listProjects();
+    const [projects, supervisors] = await Promise.all([
+      listProjects(),
+      listSupervisors(),
+    ]);
 
     const headerRow = createElement('div', { className: 'header-row' });
     const backButton = createElement('button', { text: 'Back' }) as HTMLButtonElement;
@@ -315,12 +318,22 @@ export const initApp = (): void => {
       projectSelect.append(opt);
     });
 
-    const blockField = createElement('input') as HTMLInputElement;
-    blockField.placeholder = 'Block name';
+    const blockField = createElement('select') as HTMLSelectElement;
     blockField.required = true;
+    const defaultBlock = createElement('option', { text: 'Select a block...' });
+    defaultBlock.value = '';
+    blockField.append(defaultBlock);
 
-    const supervisorField = createElement('input') as HTMLInputElement;
-    supervisorField.placeholder = 'Supervisor';
+    const supervisorField = createElement('select') as HTMLSelectElement;
+    supervisorField.required = true;
+    const defaultSupervisor = createElement('option', { text: 'Select a supervisor...' });
+    defaultSupervisor.value = '';
+    supervisorField.append(defaultSupervisor);
+    supervisors.forEach((s) => {
+      const opt = createElement('option', { text: s });
+      opt.value = s;
+      supervisorField.append(opt);
+    });
 
     const targetDensityField = createElement('input') as HTMLInputElement;
     targetDensityField.type = 'number';
@@ -356,7 +369,29 @@ export const initApp = (): void => {
 
       logUserAction('Project selected', { projectName: selectedProjectName });
 
-      // blockField.value = project.project_name;
+      // Populate block dropdown
+      blockField.innerHTML = '';
+      blockField.append(defaultBlock);
+      const blocks = project.blocks_data;
+      if (Array.isArray(blocks)) {
+        blocks.forEach((b) => {
+          const opt = createElement('option', { text: String(b) });
+          opt.value = String(b);
+          blockField.append(opt);
+        });
+      } else if (typeof blocks === 'object' && blocks !== null) {
+        // If it's an object, assume keys are block names.
+        // It could also be { "raw": "..." } if error, so check for error/raw keys.
+        if ('error' in blocks) {
+          console.warn('Blocks data has error:', blocks.error);
+        } else {
+           Object.keys(blocks).forEach((b) => {
+            const opt = createElement('option', { text: b });
+            opt.value = b;
+            blockField.append(opt);
+          });
+        }
+      }
 
       rows.forEach((row) => row.row.remove());
       rows.length = 0;

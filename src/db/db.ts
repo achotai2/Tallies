@@ -7,6 +7,7 @@ class TalliesDatabase extends Dexie {
   tally_sessions!: Table<TallySession, string>;
   bagups!: Table<Bagup, string>;
   projects!: Table<Project, string>;
+  supervisors!: Table<{ name: string }, string>;
 
   constructor() {
     super('tallies-db');
@@ -25,6 +26,14 @@ class TalliesDatabase extends Dexie {
       tally_sessions: 'session_id, created_at, sync_status',
       bagups: 'bagup_id, session_id, created_at, sync_status, [session_id+created_at]',
       projects: 'project_name',
+    });
+    // v4 adds supervisors table
+    this.version(4).stores({
+      tallies: 'client_id, date, created_at, sync_status',
+      tally_sessions: 'session_id, created_at, sync_status',
+      bagups: 'bagup_id, session_id, created_at, sync_status, [session_id+created_at]',
+      projects: 'project_name',
+      supervisors: 'name',
     });
   }
 }
@@ -163,4 +172,18 @@ export const saveProjects = async (projects: Project[]): Promise<void> => {
 export const listProjects = async (): Promise<Project[]> => {
   await initDb();
   return db.projects.toArray();
+};
+
+export const saveSupervisors = async (supervisors: string[]): Promise<void> => {
+  await initDb();
+  await db.transaction('rw', db.supervisors, async () => {
+    await db.supervisors.clear();
+    await db.supervisors.bulkPut(supervisors.map((name) => ({ name })));
+  });
+};
+
+export const listSupervisors = async (): Promise<string[]> => {
+  await initDb();
+  const result = await db.supervisors.toArray();
+  return result.map((s) => s.name);
 };
