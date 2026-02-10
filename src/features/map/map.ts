@@ -2,6 +2,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import JSZip from 'jszip';
 import * as toGeoJSON from '@tmcw/togeojson';
+import type { Bagup } from '../tally_session/types';
 
 // Fix Leaflet's default icon path issues in bundlers
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -16,7 +17,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 });
 
-export const initMap = (container: HTMLElement): (() => void) => {
+export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.Map } => {
   // Center map on a default location (e.g., world or specific region)
   const map = L.map(container).setView([-1.9441, 30.0619], 13); // Defaulting to Kigali, Rwanda
 
@@ -164,10 +165,38 @@ export const initMap = (container: HTMLElement): (() => void) => {
   }, 100);
 
   // Cleanup function
-  return () => {
+  const cleanup = () => {
     if (watchId !== null) {
       navigator.geolocation.clearWatch(watchId);
     }
     map.remove();
   };
+
+  return { cleanup, map };
+};
+
+export const addBagupMarkers = (map: L.Map, bagups: Bagup[], sessionName: string): void => {
+  bagups.forEach((bagup) => {
+    if (typeof bagup.lat === 'number' && typeof bagup.lng === 'number') {
+      const date = new Date(bagup.created_at).toLocaleString();
+      const speciesList = Object.entries(bagup.counts)
+        .map(([code, count]) => `${code}: ${count}`)
+        .join('<br>');
+
+      const content = `<strong>${sessionName}</strong><br>
+       Time: ${date}<br>
+       Species:<br>${speciesList}`;
+
+      L.circleMarker([bagup.lat, bagup.lng], {
+        radius: 6,
+        fillColor: '#3388ff',
+        color: 'white',
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.8,
+      })
+        .addTo(map)
+        .bindPopup(content);
+    }
+  });
 };

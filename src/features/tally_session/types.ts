@@ -26,6 +26,8 @@ export type Bagup = {
   counts: Record<string, number>;
   sync_status: SyncStatus;
   sync_error?: string;
+  lat?: number;
+  lng?: number;
 };
 
 export type CreateTallySessionInput = {

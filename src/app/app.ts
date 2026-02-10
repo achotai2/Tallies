@@ -25,7 +25,8 @@ import { buildElapsedMap, calculateRatios, calculateTotals, formatDuration } fro
 import { createSpeciesEditorRow, createSpeciesSummaryRow } from '../features/tally_session/ui';
 import { syncProjects, syncTallies } from '../sync/sync';
 import { logUserAction, downloadLogs } from '../logger';
-import { initMap } from '../features/map/map';
+import { addBagupMarkers, initMap } from '../features/map/map';
+import { generateBagupsKML } from '../features/map/kml';
 
 const todayISO = (): string => new Date().toISOString().slice(0, 10);
 
@@ -184,7 +185,8 @@ export const initApp = (): void => {
     debugCard.append(createElement('h2', { text: 'Debug' }), downloadLogsButton);
 
     root.append(header, actionCard, listCard, sessionsCard, mapCard, syncCard, debugCard);
-    cleanupMap = initMap(mapContainer);
+    const { cleanup } = initMap(mapContainer);
+    cleanupMap = cleanup;
 
     const refreshTallies = async (): Promise<void> => {
       // Use today's date for listing simple tallies since the date picker is gone
@@ -385,9 +387,10 @@ export const initApp = (): void => {
         if ('error' in blocks) {
           console.warn('Blocks data has error:', blocks.error);
         } else {
-           Object.keys(blocks).forEach((b) => {
-            const opt = createElement('option', { text: b });
-            opt.value = b;
+           Object.values(blocks).forEach((b) => {
+            const val = String(b);
+            const opt = createElement('option', { text: val });
+            opt.value = val;
             blockField.append(opt);
           });
         }
@@ -587,6 +590,31 @@ export const initApp = (): void => {
     const bagupList = createElement('div', { className: 'tally-list' });
     bagupCard.append(bagupTitleRow, bagupList);
 
+    const mapCard = createElement('section', { className: 'card' });
+    const mapContainer = createElement('div');
+    mapContainer.id = 'session-map-container';
+    mapContainer.style.height = '400px';
+    mapCard.append(mapContainer);
+
+    // Initialize map
+    if (cleanupMap) {
+      cleanupMap();
+      cleanupMap = null;
+    }
+    const { cleanup, map } = initMap(mapContainer);
+    cleanupMap = cleanup;
+
+    // Add markers and generate KML
+    if (bagups.length > 0) {
+      addBagupMarkers(map, bagups, session.block_name);
+
+      // Log KML content to console as requested (simulating "stored in public/maps/bagups.kml")
+      const kmlContent = generateBagupsKML(bagups, session.block_name);
+      console.log('--- Generated KML Content for public/maps/bagups.kml ---');
+      console.log(kmlContent);
+      console.log('--------------------------------------------------------');
+    }
+
     const updateSummary = (nextTotals: Record<string, number>, nextRatios: Record<string, number>) => {
       const nextOverall = Object.values(nextTotals).reduce((sum, value) => sum + value, 0);
       session.species.forEach((species) => {
@@ -645,8 +673,24 @@ export const initApp = (): void => {
         return;
       }
       logUserAction('Add Bagup clicked');
+
+      let location: { lat: number; lng: number } | undefined;
+      try {
+        if (navigator.geolocation) {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 5000,
+            });
+          });
+          location = { lat: position.coords.latitude, lng: position.coords.longitude };
+        }
+      } catch (e) {
+        console.warn('Failed to get location for bagup:', e);
+      }
+
       const speciesCodes = session.species.map((species) => species.species_code);
-      const bagup = await createBagup(sessionId, speciesCodes);
+      const bagup = await createBagup(sessionId, speciesCodes, location);
       draftBagup = {
         sessionId,
         bagupId: bagup.bagup_id,
@@ -712,9 +756,9 @@ export const initApp = (): void => {
 
       editorForm.append(editorActions);
       editorCard.append(editorTitle, editorForm);
-      root.append(createLogo(), headerRow, metaCard, summaryCard, editorCard, bagupCard);
+      root.append(createLogo(), headerRow, metaCard, summaryCard, editorCard, bagupCard, mapCard);
     } else {
-      root.append(createLogo(), headerRow, metaCard, summaryCard, bagupCard);
+      root.append(createLogo(), headerRow, metaCard, summaryCard, bagupCard, mapCard);
     }
   };
 

@@ -97,7 +97,11 @@ export const markSessionsError = async (sessions: TallySession[], error: string)
   );
 };
 
-export const createBagup = async (session_id: string, speciesCodes: string[]): Promise<Bagup> => {
+export const createBagup = async (
+  session_id: string,
+  speciesCodes: string[],
+  location?: { lat: number; lng: number }
+): Promise<Bagup> => {
   const counts: Record<string, number> = {};
   speciesCodes.forEach((code) => {
     counts[code] = 0;
@@ -110,6 +114,11 @@ export const createBagup = async (session_id: string, speciesCodes: string[]): P
     counts,
     sync_status: 'pending',
   };
+
+  if (location) {
+    bagup.lat = location.lat;
+    bagup.lng = location.lng;
+  }
 
   await addBagup(bagup);
   return bagup;
