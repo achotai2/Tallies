@@ -40,7 +40,7 @@ export const initMap = (container: HTMLElement): (() => void) => {
         } else {
           gpsMarker = L.circleMarker(userLocation, {
             radius: 8,
-            fillColor: 'pink',
+            fillColor: '#FF0000',
             color: 'white',
             weight: 2,
             opacity: 1,
