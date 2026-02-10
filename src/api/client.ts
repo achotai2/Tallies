@@ -23,7 +23,10 @@ export const postTalliesBatch = async (payload: TalliesBatchPayload): Promise<vo
   }
 };
 
-export const fetchProjects = async (): Promise<Project[]> => {
+export const fetchSetupData = async (): Promise<{
+  projects: Project[];
+  supervisors: string[];
+}> => {
   const response = await fetch(API_BASE_URL, {
     method: 'GET',
   });
@@ -34,5 +37,5 @@ export const fetchProjects = async (): Promise<Project[]> => {
   }
 
   const data = await response.json();
-  return data as Project[];
+  return data as { projects: Project[]; supervisors: string[] };
 };

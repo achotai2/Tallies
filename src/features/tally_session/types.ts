@@ -41,4 +41,5 @@ export type CreateTallySessionInput = {
 export type Project = {
   project_name: string;
   species_data: Record<string, string> | { error: string; raw: string };
+  blocks_data: string[] | Record<string, any> | { error: string; raw: string };
 };
