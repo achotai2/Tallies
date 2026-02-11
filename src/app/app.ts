@@ -75,7 +75,11 @@ const renderTallyItem = (tally: TallyRecord): HTMLElement => {
 
 const createLogo = (): HTMLImageElement => {
   const img = document.createElement('img');
-  img.src = '/Logo.png';
+  
+  // This automatically becomes "/" on localhost 
+  // and "/tallies-pwa/" (or whatever your repo is named) on GitHub.
+  img.src = `${import.meta.env.BASE_URL}Logo.png`;
+  
   img.alt = 'Tree Tally';
   img.className = 'app-logo';
   return img;
