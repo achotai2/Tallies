@@ -14,7 +14,7 @@ export default defineConfig(({ command }) => {
 
   // 2. Logic: If we are building for GitHub, change the base path
   if (command !== 'serve') {
-    config.base = '/tallies-pwa/';
+    config.base = '/Tallies/';
   }
 
   // 3. Return the final config object
