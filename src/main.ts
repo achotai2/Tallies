@@ -1,12 +1,10 @@
 import './style.css';
 import { initApp } from './app/app';
+// Import the automatic registrar from the plugin
+import { registerSW } from 'virtual:pwa-register';
 
 initApp();
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((error) => {
-      console.warn('Service worker registration failed', error);
-    });
-  });
-}
+// This replaces the entire "if ('serviceWorker' in navigator)" block.
+// It automatically handles the path, registration, and updates for you.
+registerSW({ immediate: true });
