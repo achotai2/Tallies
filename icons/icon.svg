@@ -1,0 +1,6 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tree Tally">
+  <rect width="512" height="512" rx="96" fill="#0f766e" />
+  <path d="M256 96c-54 60-108 120-108 178 0 70 49 122 108 122s108-52 108-122c0-58-54-118-108-178z" fill="#d1fae5" />
+  <rect x="236" y="300" width="40" height="116" rx="12" fill="#134e4a" />
+  <rect x="208" y="408" width="96" height="24" rx="12" fill="#134e4a" />
+</svg>
