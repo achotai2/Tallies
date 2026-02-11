@@ -2,20 +2,22 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import JSZip from 'jszip';
 import * as toGeoJSON from '@tmcw/togeojson';
-import type { Bagup } from '../tally_session/types';
+// Assuming this type exists in your project
+import type { Bagup } from '../tally_session/types'; 
 
-// Fix Leaflet's default icon path issues in bundlers
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
+// --- FIX LEAFLET ICONS (The Safe Way) ---
+// We use the Unpkg CDN to load standard markers so we don't fight with the bundler.
+const DefaultIcon = L.icon({
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
 });
+L.Marker.prototype.options.icon = DefaultIcon;
+
 
 export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.Map } => {
   // Center map on a default location (e.g., world or specific region)
@@ -29,7 +31,7 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
   let userLocation: L.LatLng | null = null;
   let watchId: number | null = null;
 
-  // Watch Position
+  // --- 1. GPS TRACKING (The "Blue Dot") ---
   if (navigator.geolocation) {
     watchId = navigator.geolocation.watchPosition(
       (position) => {
@@ -39,29 +41,31 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
         if (gpsMarker) {
           gpsMarker.setLatLng(userLocation);
         } else {
+          // Create the "You are Here" blue dot
           gpsMarker = L.circleMarker(userLocation, {
             radius: 8,
-            fillColor: '#FF0000',
+            fillColor: '#3388ff', // Standard "Blue Dot" color
             color: 'white',
             weight: 2,
             opacity: 1,
             fillOpacity: 0.8
-          }).addTo(map)
-            .bindPopup('You are here');
+          }).addTo(map);
+          
+          gpsMarker.bindPopup("You are here");
         }
       },
       (error) => {
-        console.error('Geolocation error:', error);
+        console.warn('Geolocation error:', error);
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 10000,
+        maximumAge: 5000,
         timeout: 10000
       }
     );
   }
 
-  // Add GPS Button
+  // --- 2. GPS BUTTON (Zoom to me) ---
   const gpsControl = new L.Control({ position: 'topleft' });
   gpsControl.onAdd = function() {
     const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
@@ -78,16 +82,17 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
     button.style.fontSize = '18px';
     button.style.textDecoration = 'none';
     button.style.color = 'black';
+    button.style.cursor = 'pointer';
 
     L.DomEvent.on(button, 'click', function(e) {
       L.DomEvent.stop(e);
       if (userLocation) {
-        map.setView(userLocation, 16);
+        map.flyTo(userLocation, 16); // flyTo is smoother than setView
         if (gpsMarker) {
           gpsMarker.openPopup();
         }
       } else {
-        alert('Location not available yet.');
+        alert('Waiting for GPS signal...');
       }
     });
 
@@ -95,7 +100,7 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
   };
   gpsControl.addTo(map);
 
-  // Load Maps
+  // --- 3. LOAD MAPS (KML/KMZ) ---
   const loadMaps = async () => {
     try {
       const response = await fetch('/maps/index.json');
@@ -103,6 +108,7 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
       const files: string[] = await response.json();
 
       const bounds = L.latLngBounds([]);
+      let hasLayers = false;
 
       for (const file of files) {
         try {
@@ -110,12 +116,13 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
           const blob = await mapRes.blob();
           let kmlString = '';
 
+          // Handle KMZ vs KML
           if (file.endsWith('.kmz')) {
             const zip = await JSZip.loadAsync(blob);
-            // Find .kml file
-            const kmlFile = Object.values(zip.files).find(f => f.name.endsWith('.kml'));
-            if (kmlFile) {
-              kmlString = await kmlFile.async('string');
+            // Find the first .kml file inside the zip
+            const kmlFilename = Object.keys(zip.files).find(name => name.endsWith('.kml'));
+            if (kmlFilename) {
+              kmlString = await zip.files[kmlFilename].async('string');
             }
           } else if (file.endsWith('.kml')) {
             kmlString = await blob.text();
@@ -125,22 +132,34 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
             const parser = new DOMParser();
             const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
             const geojson = toGeoJSON.kml(kmlDoc);
+            
             const layer = L.geoJSON(geojson, {
+              // --- DYNAMIC POPUPS FOR ALL DATA ---
               onEachFeature: (feature, layer) => {
                 if (feature.properties) {
-                   let popupContent = '<div style="max-height: 200px; overflow-y: auto;"><table>';
-                   const displayFields = ['name', 'description'];
-                   for (const key of displayFields) {
-                     if (feature.properties[key]) {
-                       popupContent += `<tr><td><strong>${key}</strong></td><td>${feature.properties[key]}</td></tr>`;
-                     }
-                   }
-                   popupContent += '</table></div>';
+                   let popupContent = '<div style="max-height: 200px; overflow-y: auto;"><h4>Info</h4><ul>';
+                   // Loop through EVERY property in the KML data
+                   Object.keys(feature.properties).forEach(key => {
+                       // Skip empty values or complex objects
+                       const val = feature.properties![key];
+                       if(val !== null && typeof val !== 'object') {
+                           popupContent += `<li><strong>${key}:</strong> ${val}</li>`;
+                       }
+                   });
+                   popupContent += '</ul></div>';
                    layer.bindPopup(popupContent);
                 }
+              },
+              // Optional: Style your polygons here
+              style: {
+                  color: '#ff7800',
+                  weight: 2,
+                  opacity: 0.65
               }
             }).addTo(map);
+            
             bounds.extend(layer.getBounds());
+            hasLayers = true;
           }
 
         } catch (err) {
@@ -148,7 +167,7 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
         }
       }
 
-      if (bounds.isValid()) {
+      if (hasLayers && bounds.isValid()) {
         map.fitBounds(bounds);
       }
 
@@ -175,28 +194,38 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
   return { cleanup, map };
 };
 
+// --- 4. BAGUP MARKERS (Red Dots) ---
 export const addBagupMarkers = (map: L.Map, bagups: Bagup[], sessionName: string): void => {
-  const triangleIcon = L.icon({
-    iconUrl: '/icons/triangle-pin.svg',
-    iconSize: [30, 40],
-    iconAnchor: [15, 40],
-    popupAnchor: [0, -40],
-  });
-
+  // We use CircleMarkers instead of an external SVG icon to prevent 404 errors.
+  // These will be distinct RED dots.
+  
   bagups.forEach((bagup) => {
     if (typeof bagup.lat === 'number' && typeof bagup.lng === 'number') {
       const date = new Date(bagup.created_at).toLocaleString();
+      
+      // Format the species list for the popup
       const speciesList = Object.entries(bagup.counts)
-        .map(([code, count]) => `${code}: ${count}`)
+        .map(([code, count]) => `<b>${code}:</b> ${count}`)
         .join('<br>');
 
-      const content = `<strong>${sessionName}</strong><br>
-       Time: ${date}<br>
-       Species:<br>${speciesList}`;
+      const content = `<div style="text-align:center">
+        <strong>${sessionName}</strong><br>
+        <small>${date}</small>
+        <hr style="margin: 5px 0;">
+        ${speciesList || 'No counts'}
+        </div>`;
 
-      L.marker([bagup.lat, bagup.lng], { icon: triangleIcon })
-        .addTo(map)
-        .bindPopup(content);
+      // Create a Red Circle Marker for the Bagup
+      L.circleMarker([bagup.lat, bagup.lng], {
+          radius: 6,
+          fillColor: '#ff0000', // Red for Data
+          color: '#fff',
+          weight: 1,
+          opacity: 1,
+          fillOpacity: 0.8
+      })
+      .addTo(map)
+      .bindPopup(content);
     }
   });
 };
