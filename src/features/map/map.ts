@@ -103,7 +103,7 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
   // --- 3. LOAD MAPS (KML/KMZ) ---
   const loadMaps = async () => {
     try {
-      const response = await fetch('/maps/index.json');
+      const response = await fetch(`${import.meta.env.BASE_URL}maps/index.json`);
       if (!response.ok) return;
       const files: string[] = await response.json();
 
@@ -112,7 +112,7 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
 
       for (const file of files) {
         try {
-          const mapRes = await fetch(`/maps/${file}`);
+          const mapRes = await fetch(`${import.meta.env.BASE_URL}maps/${file}`);
           const blob = await mapRes.blob();
           let kmlString = '';
 
