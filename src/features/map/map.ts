@@ -18,8 +18,50 @@ const DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
+// --- 4. BAGUP MARKERS (Red Dots) ---
+export const addBagupMarker = (map: L.Map, bagup: Bagup, sessionName: string): L.CircleMarker | null => {
+  if (typeof bagup.lat === 'number' && typeof bagup.lng === 'number') {
+      const date = new Date(bagup.created_at).toLocaleString();
 
-export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.Map } => {
+      // Format the species list for the popup
+      const speciesList = Object.entries(bagup.counts)
+        .map(([code, count]) => `<b>${code}:</b> ${count}`)
+        .join('<br>');
+
+      const content = `<div style="text-align:center">
+        <strong>${sessionName}</strong><br>
+        <small>${date}</small>
+        <hr style="margin: 5px 0;">
+        ${speciesList || 'No counts'}
+        </div>`;
+
+      // Create a Red Circle Marker for the Bagup
+      return L.circleMarker([bagup.lat, bagup.lng], {
+          radius: 6,
+          fillColor: '#ff0000', // Red for Data
+          color: '#fff',
+          weight: 1,
+          opacity: 1,
+          fillOpacity: 0.8
+      })
+      .addTo(map)
+      .bindPopup(content);
+  }
+  return null;
+};
+
+export const addBagupMarkers = (map: L.Map, bagups: Bagup[], sessionName: string): void => {
+  // We use CircleMarkers instead of an external SVG icon to prevent 404 errors.
+  // These will be distinct RED dots.
+  bagups.forEach((bagup) => addBagupMarker(map, bagup, sessionName));
+};
+
+export const initMap = (container: HTMLElement): {
+  cleanup: () => void;
+  map: L.Map;
+  getCurrentLocation: () => L.LatLng | null;
+  addMarker: (bagup: Bagup, sessionName: string) => L.CircleMarker | null;
+} => {
   // Center map on a default location (e.g., world or specific region)
   const map = L.map(container).setView([-1.9441, 30.0619], 13); // Defaulting to Kigali, Rwanda
 
@@ -162,8 +204,8 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
             hasLayers = true;
           }
 
-        } catch (err) {
-          console.error(`Failed to load map ${file}:`, err);
+        } catch (error) {
+          console.error(`Failed to load map ${file}:`, error);
         }
       }
 
@@ -191,41 +233,8 @@ export const initMap = (container: HTMLElement): { cleanup: () => void; map: L.M
     map.remove();
   };
 
-  return { cleanup, map };
-};
+  const getCurrentLocation = () => userLocation;
+  const addMarker = (bagup: Bagup, sessionName: string) => addBagupMarker(map, bagup, sessionName);
 
-// --- 4. BAGUP MARKERS (Red Dots) ---
-export const addBagupMarkers = (map: L.Map, bagups: Bagup[], sessionName: string): void => {
-  // We use CircleMarkers instead of an external SVG icon to prevent 404 errors.
-  // These will be distinct RED dots.
-  
-  bagups.forEach((bagup) => {
-    if (typeof bagup.lat === 'number' && typeof bagup.lng === 'number') {
-      const date = new Date(bagup.created_at).toLocaleString();
-      
-      // Format the species list for the popup
-      const speciesList = Object.entries(bagup.counts)
-        .map(([code, count]) => `<b>${code}:</b> ${count}`)
-        .join('<br>');
-
-      const content = `<div style="text-align:center">
-        <strong>${sessionName}</strong><br>
-        <small>${date}</small>
-        <hr style="margin: 5px 0;">
-        ${speciesList || 'No counts'}
-        </div>`;
-
-      // Create a Red Circle Marker for the Bagup
-      L.circleMarker([bagup.lat, bagup.lng], {
-          radius: 6,
-          fillColor: '#ff0000', // Red for Data
-          color: '#fff',
-          weight: 1,
-          opacity: 1,
-          fillOpacity: 0.8
-      })
-      .addTo(map)
-      .bindPopup(content);
-    }
-  });
+  return { cleanup, map, getCurrentLocation, addMarker };
 };

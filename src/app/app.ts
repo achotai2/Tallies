@@ -20,7 +20,7 @@ import {
   removeBagup,
   saveBagupCounts,
 } from '../features/tally_session/db';
-import type { Bagup, CreateTallySessionInput, SpeciesRequirement } from '../features/tally_session/types';
+import type { Bagup, CreateTallySessionInput, SpeciesRequirement, TallySession } from '../features/tally_session/types';
 import { buildElapsedMap, calculateRatios, calculateTotals, formatDuration } from '../features/tally_session/calculations';
 import { createSpeciesEditorRow, createSpeciesSummaryRow } from '../features/tally_session/ui';
 import { syncProjects, syncTallies } from '../sync/sync';
@@ -41,6 +41,51 @@ const formatRatioText = (ratio: number, overall: number): string => {
     return '—';
   }
   return `${Math.round(ratio * 100)}%`;
+};
+
+const createBagupRow = (bagup: Bagup, session: TallySession, elapsedText: string): HTMLDivElement => {
+  const item = createElement('div', { className: 'bagup-item' });
+  const header = createElement('div', { className: 'bagup-header' });
+  const time = createElement('div', { text: formatTime(bagup.created_at) });
+  const elapsed = createElement('div', { className: 'small', text: elapsedText });
+  header.append(time, elapsed);
+
+  const counts = createElement('div', { className: 'bagup-counts' });
+  session.species.forEach((species) => {
+    const count = bagup.counts[species.species_code] ?? 0;
+    counts.append(
+      createElement('span', {
+        className: 'bagup-count',
+        text: `${species.display_name}: ${count}`,
+      })
+    );
+  });
+
+  item.append(header, counts);
+  return item;
+};
+
+const updateSummaryRows = (
+  summaryList: HTMLDivElement,
+  speciesList: SpeciesRequirement[],
+  totals: Record<string, number>,
+  ratios: Record<string, number>
+) => {
+  const nextOverall = Object.values(totals).reduce((sum, value) => sum + value, 0);
+  speciesList.forEach((species) => {
+    const row = summaryList.querySelector<HTMLDivElement>(
+      `[data-species-code="${species.species_code}"]`
+    );
+    if (!row) return;
+    const currentEl = row.querySelector<HTMLDivElement>('.species-current');
+    const totalEl = row.querySelector<HTMLDivElement>('.species-total');
+    if (currentEl) {
+      currentEl.textContent = `Current: ${formatRatioText(ratios[species.species_code] ?? 0, nextOverall)}`;
+    }
+    if (totalEl) {
+      totalEl.textContent = `Total: ${totals[species.species_code] ?? 0}`;
+    }
+  });
 };
 
 const renderTallyItem = (tally: TallyRecord): HTMLElement => {
@@ -107,6 +152,7 @@ export const initApp = (): void => {
   let draftBagup: DraftBagup | null = null;
   let currentFilter = 'All Sessions';
   let cleanupMap: (() => void) | null = null;
+  let currentMapInstance: ReturnType<typeof initMap> | null = null;
 
   const navigate = (state: ViewState): void => {
     logUserAction('Navigate', state);
@@ -601,12 +647,12 @@ export const initApp = (): void => {
     mapCard.append(mapContainer);
 
     // Initialize map
-    if (cleanupMap) {
-      cleanupMap();
-      cleanupMap = null;
+    if (currentMapInstance) {
+      currentMapInstance.cleanup();
+      currentMapInstance = null;
     }
-    const { cleanup, map } = initMap(mapContainer);
-    cleanupMap = cleanup;
+    currentMapInstance = initMap(mapContainer);
+    const { map } = currentMapInstance;
 
     // Add markers and generate KML
     if (bagups.length > 0) {
@@ -620,21 +666,7 @@ export const initApp = (): void => {
     }
 
     const updateSummary = (nextTotals: Record<string, number>, nextRatios: Record<string, number>) => {
-      const nextOverall = Object.values(nextTotals).reduce((sum, value) => sum + value, 0);
-      session.species.forEach((species) => {
-        const row = summaryList.querySelector<HTMLDivElement>(
-          `[data-species-code="${species.species_code}"]`
-        );
-        if (!row) return;
-        const currentEl = row.querySelector<HTMLDivElement>('.species-current');
-        const totalEl = row.querySelector<HTMLDivElement>('.species-total');
-        if (currentEl) {
-          currentEl.textContent = `Current: ${formatRatioText(nextRatios[species.species_code] ?? 0, nextOverall)}`;
-        }
-        if (totalEl) {
-          totalEl.textContent = `Total: ${nextTotals[species.species_code] ?? 0}`;
-        }
-      });
+      updateSummaryRows(summaryList, session.species, nextTotals, nextRatios);
     };
 
     updateSummary(totals, ratios);
@@ -648,25 +680,7 @@ export const initApp = (): void => {
 
       const elapsedMap = buildElapsedMap(items);
       items.forEach((bagup) => {
-        const item = createElement('div', { className: 'bagup-item' });
-        const header = createElement('div', { className: 'bagup-header' });
-        const time = createElement('div', { text: formatTime(bagup.created_at) });
-        const elapsed = createElement('div', { className: 'small', text: elapsedMap[bagup.bagup_id] });
-        header.append(time, elapsed);
-
-        const counts = createElement('div', { className: 'bagup-counts' });
-        session.species.forEach((species) => {
-          const count = bagup.counts[species.species_code] ?? 0;
-          counts.append(
-            createElement('span', {
-              className: 'bagup-count',
-              text: `${species.display_name}: ${count}`,
-            })
-          );
-        });
-
-        item.append(header, counts);
-        bagupList.append(item);
+        bagupList.append(createBagupRow(bagup, session, elapsedMap[bagup.bagup_id]));
       });
     };
 
@@ -678,30 +692,133 @@ export const initApp = (): void => {
       }
       logUserAction('Add Bagup clicked');
 
-      let location: { lat: number; lng: number } | undefined;
-      try {
-        if (navigator.geolocation) {
-          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true,
-              timeout: 5000,
-            });
-          });
-          location = { lat: position.coords.latitude, lng: position.coords.longitude };
-        }
-      } catch (e) {
-        console.warn('Failed to get location for bagup:', e);
-      }
+      // 1. Get Location (Instant)
+      const location = currentMapInstance?.getCurrentLocation() ?? undefined;
 
+      // 2. Create Bagup (DB)
       const speciesCodes = session.species.map((species) => species.species_code);
-      const bagup = await createBagup(sessionId, speciesCodes, location);
+      const bagup = await createBagup(sessionId, speciesCodes, location ? { lat: location.lat, lng: location.lng } : undefined);
+
+      // 3. Defer Map Update
+      let currentMarker: L.CircleMarker | null = null;
+      const markerTimeout = setTimeout(() => {
+        if (currentMapInstance) {
+           currentMarker = currentMapInstance.addMarker(bagup, session.block_name);
+        }
+      }, 50);
+
+      // 4. Update State & Manual UI
       draftBagup = {
         sessionId,
         bagupId: bagup.bagup_id,
         createdAt: bagup.created_at,
         counts: { ...bagup.counts },
       };
-      await renderSessionDetail(sessionId);
+
+      // Manually show editor instead of re-rendering
+      addBagupButton.style.display = 'none';
+
+      const editorCard = createElement('section', { className: 'card' });
+      const editorTitle = createElement('h2', { text: 'New bagup' });
+      const editorForm = document.createElement('form');
+
+      session.species.forEach((species) => {
+        const label = createElement('label', { text: species.display_name });
+        const input = createElement('input') as HTMLInputElement;
+        input.type = 'number';
+        input.min = '0';
+        input.value = '0';
+        input.addEventListener('input', () => {
+           if (!draftBagup) return;
+           draftBagup.counts[species.species_code] = Number(input.value || 0);
+
+           // Calculate temporary totals for summary update
+           const nextTotals = { ...totals };
+           Object.entries(draftBagup.counts).forEach(([code, count]) => {
+              nextTotals[code] = (nextTotals[code] || 0) + count;
+           });
+           const nextRatios = calculateRatios(session.species, nextTotals);
+           updateSummary(nextTotals, nextRatios);
+        });
+        editorForm.append(label, input);
+      });
+
+      const editorActions = createElement('div', { className: 'editor-actions' });
+      const cancelButton = createElement('button', { text: 'Cancel' }) as HTMLButtonElement;
+      cancelButton.type = 'button';
+      cancelButton.className = 'secondary';
+      const saveButton = createElement('button', { text: 'Save bagup' }) as HTMLButtonElement;
+      saveButton.type = 'submit';
+      editorActions.append(cancelButton, saveButton);
+
+      cancelButton.addEventListener('click', async () => {
+        if (!draftBagup) return;
+        logUserAction('Cancel Bagup');
+
+        // Remove DB entry
+        await removeBagup(draftBagup.bagupId);
+
+        // Cleanup Map Marker (Ghost Marker Fix)
+        clearTimeout(markerTimeout);
+        if (currentMarker) {
+            currentMarker.remove();
+        }
+
+        draftBagup = null;
+
+        editorCard.remove();
+        addBagupButton.style.display = '';
+
+        // Revert summary
+        const currentRatios = calculateRatios(session.species, totals);
+        updateSummary(totals, currentRatios);
+      });
+
+      editorForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!draftBagup) return;
+        logUserAction('Save Bagup', draftBagup.counts);
+        saveButton.disabled = true;
+
+        // 1. Save DB
+        await saveBagupCounts(draftBagup.bagupId, draftBagup.counts);
+
+        // 2. Update UI manually
+        const finishedBagup: Bagup = {
+            bagup_id: draftBagup.bagupId,
+            session_id: sessionId,
+            created_at: draftBagup.createdAt,
+            counts: draftBagup.counts,
+            sync_status: 'pending',
+        };
+
+        // Update local totals permanently
+        Object.entries(draftBagup.counts).forEach(([code, count]) => {
+             totals[code] = (totals[code] || 0) + count;
+        });
+
+        draftBagup = null;
+        editorCard.remove();
+        addBagupButton.style.display = '';
+
+        // Add to List
+        const elapsedText = 'Just now';
+        // Remove "No bagups yet." placeholder if it exists
+        const placeholder = bagupList.querySelector('div.small');
+        if (placeholder && placeholder.textContent === 'No bagups yet.') {
+            placeholder.remove();
+        }
+        bagupList.prepend(createBagupRow(finishedBagup, session, elapsedText));
+
+        // Final Summary Update
+        const finalRatios = calculateRatios(session.species, totals);
+        updateSummary(totals, finalRatios);
+      });
+
+      editorForm.append(editorActions);
+      editorCard.append(editorTitle, editorForm);
+      bagupCard.before(editorCard);
+      editorCard.scrollIntoView({ behavior: 'smooth' });
     });
 
     if (draftForSession && isEditable) {
