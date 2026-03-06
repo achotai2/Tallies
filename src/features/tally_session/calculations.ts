@@ -32,7 +32,7 @@ export const calculateRatios = (
 
 export const formatElapsed = (current: number, previous?: number): string => {
   // Format elapsed time using timestamps (created_at values).
-  if (!previous) {
+  if (previous === undefined) {
     return 'First bagup';
   }
   const durationMs = Math.max(current - previous, 0);
